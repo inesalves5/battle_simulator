@@ -1,4 +1,5 @@
 from itertools import permutations, product
+from collections import Counter
 import random
 import copy
 
@@ -19,7 +20,7 @@ class Game:
         opponent = self.units[1-player]
         reward = [0, 0]
         for i in range(len(action)):
-            if self.damage(units[i], opponent[action[i]], player):
+            if (action[i] != None) and (self.damage(units[i], opponent[action[i]], player)):
                 reward = [x+y for x, y in zip(reward, self.reward(player, opponent[action[i]]))]
         self.done = self.end()
         self.points = [x+y for x, y in zip(self.points, self.reward_zone())]
@@ -32,26 +33,28 @@ class Game:
         if self.action == "day":
             mul = 2 * victim["attack"][0]
         else:
-            mul = 3 * victim["attack"][1] if victim["canFly"] else 3 * victim["attack"][0] 
+            mul = (3 * victim["attack"][1]) if victim["canFly"] else (3 * victim["attack"][0])
         damage = mul + victim["defense"]
-        return [-damage, damage] if player == 0 else [damage, -damage]
+        return [damage, -damage] if player == 0 else [-damage, damage]
     
     def damage(self, attacker, victim, player):
         hits = 0
-        state = -float('inf')
-        for _ in range(attacker["attack"][0] if self.action == "day" else (attacker["attack"][1] if attacker["canFly"] else 3 * attacker["attack"][0])):
+        state = victim["damage"]
+        if (state == float("inf")):
+            return False
+        for _ in range(attacker["attack"][0] if self.action == "day" else (attacker["attack"][1] if attacker["canFly"] else attacker["attack"][0])):
             if random.randint(1, 6) == 6:
                 hits += 1
+        #print("HITS: ", hits)
         for _ in range(hits):
-            roll = random.randint(1, 6)    
-            if roll > victim["defense"]: #afunda
+            roll = random.randint(1, 6)  
+            state += roll      
+            if state > victim["defense"]: #afunda
                 state = float('inf')
                 self.pieces[1-player] -= 1
-                break
-            else:
-                state += roll          
-            victim["damage"] += state
-        return state < 0
+                break        
+        victim["damage"] = state
+        return hits > 0
     
     def reward_zone(self):
         if self.pieces[0] == 0:
@@ -61,27 +64,27 @@ class Game:
         return (0, 0)
     
     def actions_available(self, player):
-        # Índices das peças ativas do jogador e do oponente
         pecas_jogador_ativas = [i for i, p in enumerate(self.units[player]) if p["damage"] < float("inf")]
         alvos_possiveis = [i for i, p in enumerate(self.units[1-player]) if p["damage"] < float("inf")]
-
-        # Se não houver alvos ativos, não há ações possíveis
         if not alvos_possiveis:
             return []
 
-        # Se o jogador tem mais peças ativas que o oponente, permitir ataques repetidos
-        if len(pecas_jogador_ativas) > len(alvos_possiveis):
-            combinacoes_ataques = list(product(alvos_possiveis, repeat=len(pecas_jogador_ativas)))
+        num_pecas_jogador = len(pecas_jogador_ativas)
+        num_pecas_oponente = len(alvos_possiveis)
+        if num_pecas_jogador > num_pecas_oponente:
+            combinacoes_ataques = [
+                list(ataque) for ataque in product(alvos_possiveis, repeat=num_pecas_jogador)
+                if all(Counter(ataque)[alvo] >= 1 for alvo in alvos_possiveis)
+            ]
         else:
-            combinacoes_ataques = list(permutations(alvos_possiveis, len(pecas_jogador_ativas)))
+            combinacoes_ataques = list(permutations(alvos_possiveis, num_pecas_jogador))
 
         acoes_validas = []
         for ataque in combinacoes_ataques:
-            acao = [-1] * len(self.units[player])  # Começamos com todas as peças como inativas (-1)
+            acao = [None] * len(self.units[player])
             for i, indice_peca in enumerate(pecas_jogador_ativas):
-                acao[indice_peca] = ataque[i]  # Definimos o ataque dessa peça
-            acoes_validas.append(acao)  # Adicionamos como lista
-
+                acao[indice_peca] = ataque[i]  
+            acoes_validas.append(acao)  
         return acoes_validas
      
     def take_action(self, action, player):

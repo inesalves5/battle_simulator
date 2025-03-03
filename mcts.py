@@ -2,8 +2,6 @@ import random
 import numpy as np
 import math
 
-EXPLORATION = 100
-
 class MCTS_Node():
     
     def __init__(self, game, player, parent=None, action=None):
@@ -68,10 +66,9 @@ class MCTS_Node():
                 reward = v.rollout()
                 v.backpropagate(reward)
         else :
-            for _ in range(0, simulations_number):            
-                v = self._tree_policy()
-                reward = v.rollout()
-                v.backpropagate(reward)
+            v = self._tree_policy()
+            reward = v.rollout()
+            v.backpropagate(reward)
         # to select best child go for exploitation only
         return self.best_child(c_param=0.)
 

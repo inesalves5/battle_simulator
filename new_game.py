@@ -14,6 +14,8 @@ class Game:
 
     def step(self, actions):
         reward = [0, 0]
+        if actions is None:
+            return self, reward, True
         for player in range(2):
             action = actions[player]
             units = self.units[player]
@@ -56,29 +58,36 @@ class Game:
         for _ in range(hits):
             roll = random.randint(1, 6) + bonus 
             state += roll      
-            if victim["type"]=="LBA" and state >= victim["defense"]: #afunda aviao
+            if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda 
                 state = float('inf')
-                break  
-            elif state > victim["defense"]: #afunda outros
-                state = float('inf')
-                break          
+                break
         victim["damage"] = state
+        if hits:
+            if victim["type"] == "BB" or (victim["type"] == "CV" and len(victim["attack"]) == 1):#only sea attack
+                victim["isElite"][0] = False 
+                if state == victim["defense"]:
+                    victim["attack"][0] = 1 if victim["attack"][0] else 0
+            elif victim["type"] == "CV":
+                victim["isElite"][1] = False 
+                if state == victim["defense"]:
+                    victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
         return hits
     
     def reward_zone(self):
-        if len(self.units[0]) == 0:
+        if len(self.units[0]) < len(self.units[1]):
             return [-self.pv[0], self.pv[0]]
-        if len(self.units[1]) == 0:
+        if len(self.units[1]) < len(self.units[0]):
             return [self.pv[1], -self.pv[1]]
         return [0, 0]
+
 
     def actions_available(self, player):
         total_units = len(self.units[player])
         if self.action == "day":
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]=="CV" or p["type"]=="LBA"]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="BB"]
             active_targets = [i for i, p in enumerate(self.units[1 - player])]
         else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]=="CV" or p["type"]=="BB"]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="LBA"]
             active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"]!="LBA"]
 
         if active_units and active_targets:
@@ -94,13 +103,9 @@ class Game:
 
         return valid_actions
 
-
-     
-    def get_next_state(self, action, player):
-        if player == 0:
-            return self
-        new_game = copy.deepcopy(self)
-        new_game, _, _ = new_game.step(action)
+    def get_next_state(self, action):
+        game = copy.deepcopy(self)
+        new_game, _, _ = game.step(action)
         return new_game
     
     def japanese(self):

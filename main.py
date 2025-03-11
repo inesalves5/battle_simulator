@@ -17,19 +17,6 @@ def choose_random():
     allied = random.sample(units["allied"], nr_allied)
 
     return japanese, allied
-
-def represent(game, action, player):
-    if player == 0:
-        units = game.japanese()
-        opponent = game.allied()
-    else:    
-        units = game.allied()
-        opponent = game.japanese()
-        
-    print("Player:", "Japanese" if player == 0 else "Allied")
-    for i in range(len(action)):
-        print("Unit", units[i], "attacks:", opponent[action[i]])
-    print("---- end ----")
     
 def represent_2(game, actions):
     print("Starting... type: ", game.action)
@@ -44,35 +31,6 @@ def represent_2(game, actions):
             print("Unit", units[i], "attacks:", opponent[action[i]] if action[i] != None else "None")
         print("---- end ----")
 
-def main():
-    total_reward = [0, 0]
-    japanese, allied = choose_random()
-    units = [
-            [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in japanese],
-            [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in allied]
-    ]
-    game_state = game.Game(units, [random.randint(0, 3), random.randint(0, 3)])
-    node = mcts.MCTSNode(game_state)
-    tree = mcts.MCTS(game_state)
-    done = False
-    i = 1
-    while not done:
-        print("round ", i)
-        action = []
-        for player in range(2):
-            print("player: ", player)
-            node = tree.search(node, iterations=100)
-            print(node.action)
-            action.append(node.action)
-        represent_2(game_state, action)
-        game_state, reward, done = game_state.step(action)
-        print("Reward: ", reward)
-        total_reward = [x+y for x, y in zip(total_reward, reward)]
-        i += 1
-    total_reward = [x+y for x,y in zip(total_reward, game_state.reward_zone())]   
-    print("Total reward: ", total_reward)
-    return total_reward[1]
-
 def test():
     japanese, allied = choose_random()
     units = [
@@ -83,23 +41,35 @@ def test():
     node = new_mcts.MCTSNode(game_state)
     tree = new_mcts.MCTS(game_state)
     while not node.game.is_terminal():
-        new = tree.search(node, iterations=1000)
+        new = tree.search(node, iterations=50)
         action = new.action
         if action is None:
             print("no solution")
             break
-        represent_2(node.game, action) #damage is already marked 
+        #represent_2(node.game, action) #damage is already marked 
         node = new
-        """game_state, reward, done = game_state.step(action)
-        new_node = new_mcts.MCTSNode(game_state, node, action)
-        node.children.append(new_node)
-        node = new_node"""
-    print("final pieces:", len(node.game.units[0]), len(node.game.units[1]))
-    print("Zone reward: ", node.game.reward_zone()[1])
-    print("Node reward:", node.value)
-    return node.game.reward_zone()[1] + node.value
+    #print("Final number of pieces:", len(node.game.units[0]), len(node.game.units[1]))
+    #print("Zone reward: ", node.game.reward_zone()[1])
+    #print("Node reward:", node.value)
+    return len(units[1]) >= len(units[0]), node.game.reward_zone()[1] + node.value
 
-def test_game():
+if __name__ == "__main__":
+    results = 0
+    predictions = 0
+    for _ in range(1000):
+        pred, res = test()
+        if pred:
+            predictions += 1
+        if res:
+            results += 1
+    win_rate = results / 1000  
+    pred_rate = predictions / 1000
+    print("Win rate:", win_rate)
+    print("Percentage of games with advantage:", pred_rate*100)
+    
+    """
+    #testing the Class Game from game.py
+    def test_game():
     japanese, allied = choose_random()
     player = 0
     done = False
@@ -113,7 +83,48 @@ def test_game():
         player = 1 - player
     print(game_state.units)
     print(total_reward)
+    
+    #testing the original mcts & game classes
+    def main():
+        total_reward = [0, 0]
+        japanese, allied = choose_random()
+        units = [
+                [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in japanese],
+                [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in allied]
+        ]
+        game_state = game.Game(units, [random.randint(0, 3), random.randint(0, 3)])
+        node = mcts.MCTSNode(game_state)
+        tree = mcts.MCTS(game_state)
+        done = False
+        i = 1
+        while not done:
+            print("round ", i)
+            action = []
+            for player in range(2):
+                print("player: ", player)
+                node = tree.search(node, iterations=50)
+                print(node.action)
+                action.append(node.action)
+            represent_2(game_state, action)
+            game_state, reward, done = game_state.step(action)
+            print("Reward: ", reward)
+            total_reward = [x+y for x, y in zip(total_reward, reward)]
+            i += 1
+        total_reward = [x+y for x,y in zip(total_reward, game_state.reward_zone())]   
+        print("Total reward: ", total_reward)
+        return total_reward[1]
 
-if __name__ == "__main__":
-    result = test()
-    print("You win!" if result > 0 else "You did not win!")
+    #representing the original classes
+    def represent(game, action, player):
+        if player == 0:
+            units = game.japanese()
+            opponent = game.allied()
+        else:    
+            units = game.allied()
+            opponent = game.japanese()
+            
+        print("Player:", "Japanese" if player == 0 else "Allied")
+        for i in range(len(action)):
+            print("Unit", units[i], "attacks:", opponent[action[i]])
+        print("---- end ----")
+    """

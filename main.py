@@ -56,16 +56,14 @@ def test():
 if __name__ == "__main__":
     results = 0
     predictions = 0
-    for _ in range(1000):
+    for _ in range(100):
         pred, res = test()
         if pred:
             predictions += 1
         if res:
             results += 1
-    win_rate = results / 1000  
-    pred_rate = predictions / 1000
-    print("Win rate:", win_rate)
-    print("Percentage of games with advantage:", pred_rate*100)
+    print("Win percentage:", results)
+    print("Percentage of games with advantage:", predictions)
     
     """
     #testing the Class Game from game.py

@@ -30,7 +30,7 @@ class Game:
         return new, reward, new.is_terminal()
     
     def is_terminal(self):
-        return len(self.units[0]) == 0 or len(self.units[1]) == 0 or len(self.actions_available(0)) == 0 or len(self.actions_available(1)) == 0
+        return len(self.units[0]) == 0 or len(self.units[1]) == 0 or len(self.actions_available(0)) == 0 or len(self.actions_available(1)) == 0 or all(e is None for e in self.actions_available(1)) or all(e is None for e in self.actions_available(0))
     
     def reward(self, player, victim):
         if self.action == "day" and victim["type"] == "LBA":

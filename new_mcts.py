@@ -52,14 +52,12 @@ class MCTS:
             # Selection
             while node.is_fully_expanded() and node.children:
                 node = node.best_child()
-
             # Expansion
             if not node.game.is_terminal():
                 node = node.expand()
-                
             # Simulation
             result = self.simulate(node.game)
-
+            
             # Backpropagation
             self.backpropagate(node, result)
 
@@ -69,12 +67,12 @@ class MCTS:
         """Performs a random playout and returns total reward instead of binary win/loss."""
         current_game = game
         total_reward = [0, 0]
-        while not current_game.is_terminal():
+        terminal =  current_game.is_terminal()
+        while not terminal:
             actions = list(itertools.product(current_game.actions_available(0), current_game.actions_available(1)))
             action = random.choice(actions)
-            current_game, reward, _ = current_game.step(action)
+            current_game, reward, terminal = current_game.step(action)
             total_reward = [x+y for x,y in zip(reward, total_reward)]
-            
         reward_zone = current_game.reward_zone()
         total_reward = [x+y for x,y in zip(reward_zone, total_reward)]
         return total_reward[1]

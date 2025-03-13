@@ -5,7 +5,7 @@ import copy
 
 class Game:
     
-    def __init__(self, units, pv, action ="day" if random.randint(0, 1) == 0 else "night", points = [0, 0]):
+    def __init__(self, units, pv, action, points = [0, 0]):
         #eles usam (A)S-D-V - aereo, superficie, defesa, velocidade
         self.units = units
         self.action = action
@@ -19,7 +19,7 @@ class Game:
             units = self.units[player]
             opponent = self.units[1-player]
             for i in range(len(action)):
-                if action[i] != None and self.damage(units[i], opponent[action[i]], player):
+                if action[i] != None and self.damage(units[i], opponent[action[i]]):
                     reward = [x+y for x, y in zip(reward, self.reward(player, opponent[action[i]]))]
         points = [x+y for x, y in zip(self.points, reward)]
         j_units = [unit for unit in self.units[0] if unit["damage"] != float("inf")]
@@ -28,8 +28,10 @@ class Game:
         return new, reward, new.is_terminal()
     
     def is_terminal(self):
-        return len(self.units[0]) == 0 or len(self.units[1]) == 0 or len(self.actions_available(0)) == 0 or len(self.actions_available(1)) == 0
-    
+        aa0 = self.actions_available(0)
+        aa1 = self.actions_available(1)
+        return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
+        
     def reward(self, player, victim):
         if self.action == "day" and victim["type"] == "LBA":
             damage = 5 * (victim["attack"][0] + 1)
@@ -43,7 +45,7 @@ class Game:
             damage = 2 * attack + victim["defense"]
         return [damage, -damage] if player == 0 else [-damage, damage]
     
-    def damage(self, attacker, victim, player):
+    def damage(self, attacker, victim):
         hits = 0
         state = victim["damage"]
         index = 0 if self.action == "day" or len(attacker["attack"])==1 else 1
@@ -56,29 +58,35 @@ class Game:
         for _ in range(hits):
             roll = random.randint(1, 6) + bonus 
             state += roll      
-            if victim["type"]=="LBA" and state >= victim["defense"]: #afunda aviao
+            if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda 
                 state = float('inf')
-                break  
-            elif state > victim["defense"]: #afunda outros
-                state = float('inf')
-                break          
+                break
         victim["damage"] = state
+        if hits:
+            if victim["type"] == "BB" or (victim["type"] == "CV" and len(victim["attack"]) == 1):#only sea attack
+                victim["isElite"][0] = False 
+                if state == victim["defense"]:
+                    victim["attack"][0] = 1 if victim["attack"][0] else 0
+            elif victim["type"] == "CV":
+                victim["isElite"][1] = False 
+                if state == victim["defense"]:
+                    victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
         return hits
     
     def reward_zone(self):
-        if len(self.units[0]) == 0:
+        if len(self.units[0]) < len(self.units[1]):
             return [-self.pv[0], self.pv[0]]
-        if len(self.units[1]) == 0:
+        if len(self.units[1]) < len(self.units[0]):
             return [self.pv[1], -self.pv[1]]
         return [0, 0]
 
     def actions_available(self, player):
         total_units = len(self.units[player])
         if self.action == "day":
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]=="CV" or p["type"]=="LBA"]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="BB"]
             active_targets = [i for i, p in enumerate(self.units[1 - player])]
         else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]=="CV" or p["type"]=="BB"]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="LBA"]
             active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"]!="LBA"]
 
         if active_units and active_targets:
@@ -96,11 +104,9 @@ class Game:
 
 
      
-    def get_next_state(self, action, player):
-        if player == 0:
-            return self
-        new_game = copy.deepcopy(self)
-        new_game, _, _ = new_game.step(action)
+    def get_next_state(self, actions):
+        new_game = Game(self.units, self.pv, self.action, self.points)
+        new_game, _, _ = new_game.step(actions)
         return new_game
     
     def japanese(self):

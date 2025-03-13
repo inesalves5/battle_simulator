@@ -2,15 +2,17 @@ import math
 import random
 
 class MCTSNode:
-    def __init__(self, game, parent=None, player=0, action=None):
+    def __init__(self, game, parent=None, player=0, action=None, jap_action=None):
         self.game = game
         self.parent = parent
         self.children = []
         self.visits = 0
-        self.value = 0
+        self.value = [0, 0]
         self.win_rate = 0
+        self.wins = 0
         self.to_play = player
         self.action = action
+        self.jap_action = jap_action
         self.untried_actions = list(game.actions_available(player))
 
     def is_fully_expanded(self):
@@ -20,7 +22,7 @@ class MCTSNode:
         """Selects the best child based on UCT value."""
         return max(
             self.children,
-            key=lambda c: (c.value / (c.visits + 1e-6)) + exploration_weight * math.sqrt(math.log(self.visits + 1) / (c.visits + 1e-6))
+            key=lambda c: (c.value[self.to_play] / (c.visits + 1e-6)) + exploration_weight * math.sqrt(math.log(self.visits + 1) / (c.visits + 1e-6))
         )
 
     def expand(self):
@@ -29,17 +31,23 @@ class MCTSNode:
             return self
 
         action = random.choice(self.untried_actions)
-        next_game = self.game.get_next_state([self.action, action], self.to_play)
         new_player = 1 - self.to_play  # Switch player
-        child_node = MCTSNode(next_game, parent=self, player=new_player, action=action)
+
+        if self.to_play == 0: #jogador japones
+            child_node = MCTSNode(self.game, parent=self, player=new_player, action=action, jap_action=self.action)
+        else: #jogador aliado => calcular danos
+            next_game = self.game.get_next_state([self.action, action])
+            child_node = MCTSNode(next_game, parent=self, player=new_player, action=action)
         self.children.append(child_node)
         return child_node
 
     def update(self, result):
         """Updates node statistics after a simulation."""
         self.visits += 1
-        self.value += result
-        self.win_rate = self.value / self.visits
+        self.value = [x+y for x,y in zip(self.value, result)]
+        if result[self.to_play] > 0:
+            self.wins += 1
+        self.win_rate = self.wins / self.visits
 
 class MCTS:
     def __init__(self, game):
@@ -53,11 +61,11 @@ class MCTS:
                 node = node.best_child()
 
             # Expansion
-            if not node.game.is_terminal():
+            if not (node.game.is_terminal() and node.to_play == 0): #node
                 node = node.expand()
 
             # Simulation
-            result = self.simulate(node.game, node.to_play, node.action)
+            result = self.simulate(node.game, node.to_play, node.action) 
 
             # Backpropagation
             self.backpropagate(node, result)
@@ -68,19 +76,17 @@ class MCTS:
         """Performs a random playout and returns result."""
         current_game = game
         current_player = player
-
-        while not current_game.is_terminal():
+        while not (current_game.is_terminal() and current_player == 0):
             action = random.choice(current_game.actions_available(current_player))
-            current_game = current_game.get_next_state([prev, action], current_player)
+            if current_player == 0: #japones
+                prev = action
+            else:
+                current_game = current_game.get_next_state([prev, action])
             current_player = 1 - current_player  # Switch player
-            prev = action
-
-        winner = current_game.get_winner()
-        return 1 if winner == player else 0  # 1 if win, 0 if loss
+        return current_game.points
 
     def backpropagate(self, node, result):
         """Backpropagates the simulation result up the tree."""
         while node:
             node.update(result)
             node = node.parent
-            result = 1 - result  # Flip result for the opponent

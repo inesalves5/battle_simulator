@@ -2,8 +2,25 @@ import mcts
 import json
 import game
 import random
-import new_game
-import new_mcts
+import graphviz
+
+def visualize_mcts(root):
+    """Generates a Graphviz visualization of the MCTS tree."""
+    dot = graphviz.Digraph(format='png')
+    
+    def add_nodes_edges(node, parent_name=None, edge_label=""):
+        node_label = f"Action: {node.action}\nVisits: {node.visits}\nValue: {node.value}\nWin rate: {node.win_rate:.2f}"
+        node_name = str(id(node))
+        dot.node(node_name, label=node_label, shape="box", style="filled", fillcolor="lightblue")
+        
+        if parent_name:
+            dot.edge(parent_name, node_name, label=edge_label)
+        
+        for child in node.children:
+            add_nodes_edges(child, node_name, edge_label=f"{child.action}")
+    
+    add_nodes_edges(root)
+    return dot
 
 def choose_random():
 
@@ -18,42 +35,64 @@ def choose_random():
 
     return japanese, allied
     
-def represent_2(game, actions):
+def represent(game, action, player):
     print("Starting... type: ", game.action)
-    print("actions:", actions)
-    for player in range(2):
-        action = actions[player]
-        units = game.units[player]
-        opponent = game.units[1-player]
-        
-        print("Player:", "Japanese" if player == 0 else "Allied")
-        for i in range(len(action)):
-            print("Unit", units[i], "attacks:", opponent[action[i]] if action[i] != None else "None")
-        print("---- end ----")
+    print("action:", action)
+    units = game.units[player]
+    opponent = game.units[1-player]
+    print("Player:", "Japanese" if player == 0 else "Allied")
+    for i in range(len(action)):
+        print("Unit", units[i], "attacks:", opponent[action[i]] if action[i] != None else "None")
+    print("---- end ----")
 
-def test():
+def choose_action(units, pv, player):
+    game_day = game.Game(units, pv, "day")
+    game_night = game.Game(units, pv, "night")
+    res_day = mcts_round(game_day)
+    res_night = mcts_round(game_night)
+    return "day" if res_day[player] > res_night[player] else "night"
+
+def mcts_round(game_state):
+    node = mcts.MCTSNode(game_state)
+    tree = mcts.MCTS(game_state)
+    while not (node.game.is_terminal() and node.to_play == 0):
+        new = tree.search(node, iterations=100)
+        #dot = visualize_mcts(root)
+        #dot.render('mcts_tree', view=True) 
+        action = new.action
+        represent(node.game, action, node.to_play) 
+        node = new
+    return node.value
+
+def main():
     japanese, allied = choose_random()
     units = [
             [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in japanese],
             [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "type": unit["type"]} for unit in allied]
     ]
-    game_state = new_game.Game(units, [random.randint(1, 3), random.randint(1, 3)])
-    node = new_mcts.MCTSNode(game_state)
-    tree = new_mcts.MCTS(game_state)
-    while not node.game.is_terminal():
-        new = tree.search(node, iterations=50)
-        action = new.action
-        if action is None:
-            print("no solution")
-            break
-        #represent_2(node.game, action) #damage is already marked 
-        node = new
-    #print("Final number of pieces:", len(node.game.units[0]), len(node.game.units[1]))
-    #print("Zone reward: ", node.game.reward_zone()[1])
-    #print("Node reward:", node.value)
-    return len(units[1]) >= len(units[0]), node.game.reward_zone()[1] + node.value
+    pv = [random.randint(1, 3), random.randint(1, 3)]
+    player = 0 #playing as player "japanese"
+    action = choose_action(units, pv, player) #choosing best action for player
+    print("Best action is:", action)
+    game_state = game.Game(units, pv, action)
+    result = mcts_round(game_state)
+    return len(units[1]) >= len(units[0]), result[player]
 
 if __name__ == "__main__":
+    print(main())
+    """
+    preds, ress = 0, 0
+    for _ in range(100):
+        pred, res = main()
+        if pred:
+            preds += 1
+        if res:
+            ress += 1
+    print("Games won by allied:", ress)  
+    print("Games with allied advantage:", preds)
+    """
+
+    """
     results = 0
     predictions = 0
     for _ in range(100):
@@ -64,6 +103,8 @@ if __name__ == "__main__":
             results += 1
     print("Win percentage:", results)
     print("Percentage of games with advantage:", predictions)
+    """
+    
     
     """
     #testing the Class Game from game.py
@@ -112,17 +153,17 @@ if __name__ == "__main__":
         print("Total reward: ", total_reward)
         return total_reward[1]
 
-    #representing the original classes
-    def represent(game, action, player):
-        if player == 0:
-            units = game.japanese()
-            opponent = game.allied()
-        else:    
-            units = game.allied()
-            opponent = game.japanese()
-            
+    #representing the mixed actions
+    def represent_2(game, actions):
+    print("Starting... type: ", game.action)
+    print("actions:", actions)
+    for player in range(2):
+        action = actions[player]
+        units = game.units[player]
+        opponent = game.units[1-player]
+        
         print("Player:", "Japanese" if player == 0 else "Allied")
         for i in range(len(action)):
-            print("Unit", units[i], "attacks:", opponent[action[i]])
+            print("Unit", units[i], "attacks:", opponent[action[i]] if action[i] != None else "None")
         print("---- end ----")
     """

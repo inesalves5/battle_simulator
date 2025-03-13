@@ -1,0 +1,16 @@
+digraph {
+	2098965277600 [label="Action: None
+Visits: 100
+Value: [588, -588]
+Win rate: 0.99" fillcolor=lightblue shape=box style=filled]
+	2098966155408 [label="Action: [0]
+Visits: 100
+Value: [588, -588]
+Win rate: 0.01" fillcolor=lightblue shape=box style=filled]
+	2098965277600 -> 2098966155408 [label="[0]"]
+	2098966157008 [label="Action: [0]
+Visits: 99
+Value: [594, -594]
+Win rate: 1.00" fillcolor=lightblue shape=box style=filled]
+	2098966155408 -> 2098966157008 [label="[0]"]
+}

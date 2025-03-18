@@ -2,6 +2,7 @@ from itertools import permutations, product
 from collections import Counter
 import random
 import copy
+from collections import defaultdict
 
 class Game:
     
@@ -102,15 +103,31 @@ class Game:
 
         return valid_actions
 
+    def simulate_next(self, actions):
+        states = defaultdict(int)
+        rewards = [0, 0]
+
+        for _ in range(50):
+            new_game = Game(self.units, self.pv, self.action, self.points)  # Create a fresh game each time
+            game, reward, _ = new_game.step(actions)
+            states[game] += 1 
+            rewards = [x + y for x, y in zip(reward, rewards)]
+
+        avg_rewards = [x / 50 for x in rewards]
+        most_visited_state = max(states, key=states.get)
+        return most_visited_state, avg_rewards
 
      
     def get_next_state(self, actions):
         new_game = Game(self.units, self.pv, self.action, self.points)
-        new_game, _, _ = new_game.step(actions)
-        return new_game
+        new_game, reward, _ = new_game.step(actions)
+        return new_game, reward
     
     def japanese(self):
         return self.units[0]
     
     def allied(self):
         return self.units[1]
+    
+    def __eq__(self, other):
+        return isinstance(other, Game) and self.units == other.units and self.pv == other.pv and self.action == other.action and self.points == other.points

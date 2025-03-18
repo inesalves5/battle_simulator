@@ -2,7 +2,7 @@ import math
 import random
 
 class MCTSNode:
-    def __init__(self, game, parent=None, player=0, action=None, jap_action=None):
+    def __init__(self, game, parent=None, player=0, action=None):
         self.game = game
         self.parent = parent
         self.children = []
@@ -12,7 +12,6 @@ class MCTSNode:
         self.wins = 0
         self.to_play = player
         self.action = action
-        self.jap_action = jap_action
         self.untried_actions = list(game.actions_available(player))
 
     def is_fully_expanded(self):
@@ -34,9 +33,9 @@ class MCTSNode:
         new_player = 1 - self.to_play  # Switch player
 
         if self.to_play == 0: #jogador japones
-            child_node = MCTSNode(self.game, parent=self, player=new_player, action=action, jap_action=self.action)
+            child_node = MCTSNode(self.game, parent=self, player=new_player, action=action)
         else: #jogador aliado => calcular danos
-            next_game = self.game.get_next_state([self.action, action])
+            next_game, _ = self.game.get_next_state([self.action, action])
             child_node = MCTSNode(next_game, parent=self, player=new_player, action=action)
         self.children.append(child_node)
         return child_node
@@ -48,12 +47,18 @@ class MCTSNode:
         if result[self.to_play] > 0:
             self.wins += 1
         self.win_rate = self.wins / self.visits
+        
+    def __eq__(self, other):
+        return isinstance(other, MCTSNode) and self.game == other.game and self.to_play == other.to_play and \
+                self.action == other.action and self.children == other.children and self.untried_actions == other.untried_actions
 
 class MCTS:
-    def __init__(self, game):
-        self.game = game
-
+    def __init__(self, root):
+        self.root = root
+        
     def search(self, root, iterations=1000):
+        if root.game.is_terminal():
+            return root
         for _ in range(iterations):
             node = root
             # Selection
@@ -61,7 +66,7 @@ class MCTS:
                 node = node.best_child()
 
             # Expansion
-            if not (node.game.is_terminal() and node.to_play == 0): #node
+            if not node.game.is_terminal(): #node
                 node = node.expand()
 
             # Simulation
@@ -76,14 +81,16 @@ class MCTS:
         """Performs a random playout and returns result."""
         current_game = game
         current_player = player
+        rewards = [0, 0]
         while not (current_game.is_terminal() and current_player == 0):
             action = random.choice(current_game.actions_available(current_player))
             if current_player == 0: #japones
                 prev = action
             else:
-                current_game = current_game.get_next_state([prev, action])
+                current_game, reward = current_game.get_next_state([prev, action])
+                rewards = [x + y for x, y in zip(reward, rewards)]
             current_player = 1 - current_player  # Switch player
-        return current_game.points
+        return rewards
 
     def backpropagate(self, node, result):
         """Backpropagates the simulation result up the tree."""

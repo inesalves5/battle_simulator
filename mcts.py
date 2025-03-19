@@ -2,12 +2,12 @@ import math
 import random
 
 class MCTSNode:
-    def __init__(self, game, parent=None, player=0, action=None):
+    def __init__(self, game, parent=None, player=0, action=None, value=[0, 0]):
         self.game = game
         self.parent = parent
         self.children = []
         self.visits = 0
-        self.value = [0, 0]
+        self.value = value
         self.win_rate = 0
         self.wins = 0
         self.to_play = player
@@ -31,12 +31,15 @@ class MCTSNode:
 
         action = random.choice(self.untried_actions)
         new_player = 1 - self.to_play  # Switch player
-
+        reward = [0, 0]
         if self.to_play == 0: #jogador japones
-            child_node = MCTSNode(self.game, parent=self, player=new_player, action=action)
+            child_game = self.game
         else: #jogador aliado => calcular danos
-            next_game, _ = self.game.get_next_state([self.action, action])
-            child_node = MCTSNode(next_game, parent=self, player=new_player, action=action)
+            child_game, reward = self.game.get_next_state([self.action, action])
+        for child in self.children:
+            if child.game == child_game and child.action == action:
+                return child
+        child_node = MCTSNode(child_game, parent=self, player=new_player, action=action, value=reward)
         self.children.append(child_node)
         return child_node
 
@@ -90,6 +93,7 @@ class MCTS:
                 current_game, reward = current_game.get_next_state([prev, action])
                 rewards = [x + y for x, y in zip(reward, rewards)]
             current_player = 1 - current_player  # Switch player
+        rewards = [x + y for x, y in zip(rewards, current_game.reward_zone())]
         return rewards
 
     def backpropagate(self, node, result):

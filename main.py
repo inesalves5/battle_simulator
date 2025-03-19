@@ -35,7 +35,7 @@ def visualize_mcts(root):
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"Type of action: {node.game.action}\nUnits Japanese: {len(node.game.units[0])} Allied: {len(node.game.units[1])}\nPoints: {node.value}\nPlayer: {node.to_play}\nPrevious action: {node.action}"
+        node_label = f"Type: {node.game.action}\nJap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nPoints: {node.value}\nPlayer: {node.to_play}\n{node.action}"
         G.add_node(node_id, label=node_label)
 
         if parent_id:
@@ -73,7 +73,7 @@ def choose_random():
 
     return japanese, allied
     
-"""    
+
 def represent(game, action, player):
     print("Action type: ", game.action)
     print("action:", action)
@@ -83,14 +83,20 @@ def represent(game, action, player):
     for i in range(len(action)):
         print("Unit", units[i], "attacks:", opponent[action[i]] if action[i] != None else "None")
     print("---- end ----")
-"""
+
 
 def choose_action(units, pv, player):
     game_day = game.Game(copy.deepcopy(units), pv, "day")
     game_night = game.Game(copy.deepcopy(units), pv, "night")
-    res_day, _ = mcts_round(game_day)
+    #res_day, root_day = mcts_round(game_day)
+    #res_night, root_night = mcts_round(game_night)
+    node_day = mcts.MCTSNode(game_day)
+    tree = mcts.MCTS(node_day)
+    res_day = tree.search(node_day, iterations=100).value 
+    node_night = mcts.MCTSNode(game_night)
+    tree = mcts.MCTS(node_night)
+    res_night = tree.search(node_night, iterations=100).value
     print("Day result:", res_day)
-    res_night, _ = mcts_round(game_night)
     print("Night result:", res_night)
     return "day" if res_day[player] > res_night[player] else "night"
 
@@ -101,20 +107,24 @@ def mcts_round(game_state):
     root = node
     tree = mcts.MCTS(node)
     while not done:
-        j_node = tree.search(node, iterations=50) #find action for japanese
+        j_node = tree.search(node, iterations=20) #find action for japanese
         j_action = j_node.action
         if j_action == None:
             print("No action found for japanese")
             return rewards, root
+        print(game_state.units)
+        represent(game_state, j_action, 0)
         new_node = mcts.MCTSNode(node.game, parent=node, player=1, action=j_action)
-        a_node = tree.search(new_node, iterations=50) #find action for allied
+        a_node = tree.search(new_node, iterations=20) #find action for allied
         a_action = a_node.action
         if a_action == None:
             print("No action found for allied")
             return rewards, root
+        represent(game_state, a_action, 1)
         game_state, reward, done = node.game.step([j_action, a_action]) 
-        node = mcts.MCTSNode(game_state, parent=new_node, player=0, action=a_action)
+        node = mcts.MCTSNode(game_state, parent=new_node, player=0, action=a_action, value=reward)
         rewards = [x+y for x, y in zip(rewards, reward)]
+    rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, root
 
 def main():

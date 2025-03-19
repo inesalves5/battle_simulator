@@ -112,7 +112,6 @@ def mcts_round(game_state):
         if j_action == None:
             print("No action found for japanese")
             return rewards, root
-        print(game_state.units)
         represent(game_state, j_action, 0)
         new_node = mcts.MCTSNode(node.game, parent=node, player=1, action=j_action)
         a_node = tree.search(new_node, iterations=20) #find action for allied

@@ -156,7 +156,7 @@ def main():
     #print("Best action is:", action)
     game_state = game.Game(units, pv, action)
     max_reward = game_state.max_reward(action)
-    result, root = mcts_round(game_state, max_reward) 
+    result, root = mcts_round(copy.deepcopy(game_state), max_reward) 
     visualize_mcts(root)
     return result
 

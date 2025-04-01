@@ -1,5 +1,6 @@
 import math
 import random
+import copy
 
 class ChanceNode: #node de chance
     def __init__(self, game, parent, j_action, a_action):
@@ -25,7 +26,7 @@ class ChanceNode: #node de chance
     def expand(self):
         """Expands by adding a new child node."""
         game, reward = self.game.get_next_state([self.j_action, self.a_action])
-        child_node = DecisionNode(game, self.max_reward, parent=self, action=self.a_action)
+        child_node = DecisionNode(copy.deepcopy(game), self.max_reward, parent=self, action=self.a_action)
         if child_node in self.children:
             return child_node
         self.children.append(child_node)
@@ -72,9 +73,9 @@ class DecisionNode: #node para as acoes
 
         action = self.untried_actions.pop()
         if self.player == 0:
-            child_node = DecisionNode(self.game, self.max_reward, parent=self, player=1-self.player, action=action)
+            child_node = DecisionNode(copy.deepcopy(self.game), self.max_reward, parent=self, player=1-self.player, action=action)
         else:
-            child_node = ChanceNode(self.game, parent=self, j_action=self.action, a_action=action)
+            child_node = ChanceNode(copy.deepcopy(self.game), parent=self, j_action=self.action, a_action=action)
         self.children.append(child_node)
         return child_node
     

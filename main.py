@@ -32,12 +32,20 @@ def _hierarchy_pos(G, node, width=1., vert_gap=0.2, xcenter=0.5, pos=None, paren
 def visualize_mcts(root):
     """Generates a tree visualization using NetworkX and Matplotlib without Graphviz."""
     G = nx.DiGraph()
+    node_shapes = {}
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"Type: {node.game.action}\nJap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nPoints: {node.value}\nPlayer: {node.to_play}\n{node.action}"
+        node_label = f"Type: {node.game.action}\nJap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nPoints: {node.value}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
         G.add_node(node_id, label=node_label)
 
+        # Determine shape: stars for chance nodes, circles otherwise
+        if isinstance(node, mcts.ChanceNode):
+            node_shapes[node_id] = "star"
+        elif node.player == 0:
+            node_shapes[node_id] = "japanese"
+        else:
+            node_shapes[node_id] = "allied"
         if parent_id:
             G.add_edge(parent_id, node_id)
 
@@ -53,22 +61,29 @@ def visualize_mcts(root):
     plt.figure(figsize=(12, 6))
     labels = nx.get_node_attributes(G, "label")
 
-    nx.draw(G, pos, with_labels=False, node_size=2000, node_color="lightblue", edge_color="gray", arrows=False)
+    # Draw nodes separately based on shape
+    for node_id, shape in node_shapes.items():
+        if shape == "star":
+            nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_shape="*", node_size=2000, node_color="yellow")
+        elif shape == "japanese":
+            nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_size=2000, node_color="pink")
+        else:
+            nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_size=2000, node_color="lightblue")
+    
+    nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=6, verticalalignment="center")
 
     plt.title("MCTS Tree Visualization")
     plt.show()
     
-    
-    
 def choose_random():
     with open("units.json", "r") as file:
         units = json.load(file)
 
-    nr_japanese = random.randint(1, len(units["japanese"]))
+    nr_japanese = random.randint(1, 3)
     japanese = random.sample(units["japanese"], nr_japanese)
     
-    nr_allied = random.randint(1, len(units["allied"]))
+    nr_allied = random.randint(1, 3)
     allied = random.sample(units["allied"], nr_allied)
 
     return japanese, allied
@@ -91,19 +106,21 @@ def choose_action(units, pv, player):
     #res_day, root_day = mcts_round(game_day)
     #res_night, root_night = mcts_round(game_night)
     node_day = mcts.MCTSNode(game_day)
-    tree = mcts.MCTS(node_day)
-    res_day = tree.search(node_day, iterations=100).value 
+    tree_day = mcts.MCTS(node_day)
+    res_day = tree_day.search(node_day, iterations=100).value 
+    visualize_mcts(node_day)
     node_night = mcts.MCTSNode(game_night)
-    tree = mcts.MCTS(node_night)
-    res_night = tree.search(node_night, iterations=100).value
+    tree_night = mcts.MCTS(node_night)
+    res_night = tree_night.search(node_night, iterations=100).value
+    visualize_mcts(node_night)
     print("Day result:", res_day)
     print("Night result:", res_night)
     return "day" if res_day[player] > res_night[player] else "night"
 
-def mcts_round(game_state):
+def mcts_round(game_state, max_reward):
     done = False
     rewards = [0, 0]
-    node = mcts.MCTSNode(game_state)
+    node = mcts.DecisionNode(game_state, max_reward=max_reward)
     root = node
     tree = mcts.MCTS(node)
     while not done:
@@ -112,16 +129,17 @@ def mcts_round(game_state):
         if j_action == None:
             print("No action found for japanese")
             return rewards, root
-        represent(game_state, j_action, 0)
-        new_node = mcts.MCTSNode(node.game, parent=node, player=1, action=j_action)
+        represent(root.game, j_action, 0)
+        new_node = mcts.DecisionNode(node.game, max_reward, parent=node, player=1, action=j_action)
         a_node = tree.search(new_node, iterations=20) #find action for allied
-        a_action = a_node.action
+        a_action = a_node.a_action
         if a_action == None:
             print("No action found for allied")
             return rewards, root
-        represent(game_state, a_action, 1)
-        game_state, reward, done = node.game.step([j_action, a_action]) 
-        node = mcts.MCTSNode(game_state, parent=new_node, player=0, action=a_action, value=reward)
+        represent(root.game, a_action, 1)
+        chance_node = mcts.ChanceNode(game_state, parent=new_node, j_action=j_action, a_action=a_action)
+        game_state, reward, done = chance_node.game.step([j_action, a_action]) 
+        node = mcts.DecisionNode(game_state, max_reward, parent=chance_node, action=a_action, player=0)
         rewards = [x+y for x, y in zip(rewards, reward)]
     rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, root
@@ -134,10 +152,11 @@ def main():
     ]
     pv = [random.randint(1, 3), random.randint(1, 3)]
     player = 0 #playing as player "japanese"
-    action = choose_action(units, pv, player) #choosing best action for player    
-    print("Best action is:", action)
+    action = "day" #choose_action(units, pv, player) #choosing best action for player    
+    #print("Best action is:", action)
     game_state = game.Game(units, pv, action)
-    result, root = mcts_round(game_state) 
+    max_reward = game_state.max_reward(action)
+    result, root = mcts_round(game_state, max_reward) 
     visualize_mcts(root)
     return result
 

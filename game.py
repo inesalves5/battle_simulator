@@ -21,7 +21,7 @@ class Game:
             opponent = self.units[1-player]
             for i in range(len(action)):
                 if action[i] != None and self.damage(units[i], opponent[action[i]]):
-                    reward = [x+y for x, y in zip(reward, self.reward(player, opponent[action[i]]))]
+                    reward = [x+y for x, y in zip(reward, self.reward(self.action, player, opponent[action[i]]))]
         points = [x+y for x, y in zip(self.points, reward)]
         j_units = [unit for unit in self.units[0] if unit["damage"] != float("inf")]
         a_units = [unit for unit in self.units[1] if unit["damage"] != float("inf")]
@@ -33,10 +33,18 @@ class Game:
         aa1 = self.actions_available(1)
         return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
-    def reward(self, player, victim):
-        if self.action == "day" and victim["type"] == "LBA":
+    def max_reward(self, action): #fazemos para 0 porque é igual
+        rewards = [0, 0]
+        for unit in self.units[0]:
+            rewards = [x+y for x, y in zip(rewards, self.reward(action, 0, unit))]
+        for unit in self.units[1]:
+            rewards = [x+y for x, y in zip(rewards, self.reward(action, 0, unit))]
+        return max(rewards)
+        
+    def reward(self, action, player, victim):
+        if action == "day" and victim["type"] == "LBA":
             damage = 5 * (victim["attack"][0] + 1)
-        elif self.action == "day":
+        elif action == "day":
             attack = 0 if victim["type"] == "BB" else victim["attack"][0]
             damage = 3 * attack + victim["defense"]
         elif victim["type"] == "LBA":

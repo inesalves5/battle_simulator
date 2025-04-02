@@ -18,9 +18,14 @@ class ChanceNode: #node de chance
     
     def best_child(self, exploration_weight=1.4): #esta a escolher a melhor para o player allied sempre
         """Selects the best child based on UCT value."""
+        unexplored_actions = [child for child in self.children if child.visits == 0]
+    
+        if unexplored_actions:
+            return self.expand()
         return max(
             self.children,
-            key=lambda c: (c.value[1] / (c.visits + 1e-6)) + exploration_weight * math.sqrt(math.log(self.visits + 1) / (c.visits + 1e-6))
+            key=lambda c: float('inf') if c.visits == 0 else 
+            c.value[1] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
         )
 
     def expand(self):
@@ -35,9 +40,12 @@ class ChanceNode: #node de chance
     def update(self, result):
         """Updates node statistics after a simulation."""
         self.visits += 1
-        new_value = [self.visits/(self.visits + 1) * x + y / (self.visits + 1) for x,y in zip(self.value, result)]
-        self.value = new_value
-                
+        self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
+    
+    def add_child(self, child):
+        """Adds a child node."""
+        self.children.append(child)
+    
     def __eq__(self, other):
         return isinstance(other, ChanceNode) and self.game == other.game and self.a_action == other.a_action and\
                 self.j_action == other.j_action and self.parent == other.parent 
@@ -60,10 +68,14 @@ class DecisionNode: #node para as acoes
 
     def best_child(self, exploration_weight=1.4): #ver melhor constante que divide
         """Selects the best child based on UCT value."""
+        unexplored_actions = [child for child in self.children if child.visits == 0]
+    
+        if unexplored_actions:
+            return self.expand()
         return max(
             self.children,
             key=lambda c: float('inf') if c.visits == 0 else 
-            c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits + 1) / (c.visits + 1e-6))
+            c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
         )
         
     def expand(self):
@@ -82,8 +94,12 @@ class DecisionNode: #node para as acoes
     def update(self, result):
         """Updates node statistics after a simulation."""
         self.visits += 1
-        self.value = [x+y for x,y in zip(self.value, result)]
+        self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
         
+    def add_child(self, child):
+        """Adds a child node."""
+        self.children.append(child)
+              
     def __eq__(self, other):
         return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
                 self.parent == other.parent and self.untried_actions == other.untried_actions and self.player == other.player
@@ -123,6 +139,7 @@ class MCTS:
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
+        rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())]
         return rewards
 
     def backpropagate(self, node, result):

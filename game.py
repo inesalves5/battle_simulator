@@ -67,7 +67,9 @@ class Game:
         for _ in range(hits):
             roll = random.randint(1, 6) + bonus 
             state += roll      
-            if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda 
+            if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda
+                victim["availability"] -= round(state / victim["defense"], 2)
+                victim["availability"] = max(victim["availability"], 0)
                 state = float('inf')
                 break
         victim["damage"] = state

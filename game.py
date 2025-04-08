@@ -30,7 +30,11 @@ class Game:
     
     def is_terminal(self):
         aa0 = self.actions_available(0)
+        if all([a is None for a in aa0]):
+            self.units[0]=[]
         aa1 = self.actions_available(1)
+        if all([a is None for a in aa1]):
+            self.units[1]=[]
         return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
@@ -45,19 +49,17 @@ class Game:
         if action == "day" and victim["type"] == "LBA":
             damage = 5 * (victim["attack"][0] + 1)
         elif action == "day":
-            attack = 0 if victim["type"] == "BB" else victim["attack"][0]
-            damage = 3 * attack + victim["defense"]
+            damage = 3 * victim["attack"][0] + victim["defense"]
         elif victim["type"] == "LBA":
             damage = 0
         else:
-            attack = victim["attack"][0] if len(victim["attack"])==1  else victim["attack"][1]
-            damage = 2 * attack + victim["defense"]
+            damage = 2 * victim["attack"][1] + victim["defense"]
         return [damage, -damage] if player == 0 else [-damage, damage]
     
     def damage(self, attacker, victim):
         hits = 0
         state = victim["damage"]
-        index = 0 if self.action == "day" or len(attacker["attack"])==1 else 1
+        index = 0 if self.action == "day" else 1
         bonus = 1 if attacker["isElite"][index] else 0
         if (state == float("inf")):
             return False
@@ -74,14 +76,9 @@ class Game:
                 break
         victim["damage"] = state
         if hits:
-            if victim["type"] == "BB" or (victim["type"] == "CV" and len(victim["attack"]) == 1):#only sea attack
-                victim["isElite"][0] = False 
-                if state == victim["defense"]:
-                    victim["attack"][0] = 1 if victim["attack"][0] else 0
-            elif victim["type"] == "CV":
-                victim["isElite"][1] = False 
-                if state == victim["defense"]:
-                    victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
+            victim["isElite"] = [False, False] 
+            if state == victim["defense"]:
+                victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
         return hits
     
     def reward_zone(self):
@@ -93,43 +90,30 @@ class Game:
 
     def actions_available(self, player):
         total_units = len(self.units[player])
-        if self.action == "day":
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="BB"]
-            active_targets = [i for i, p in enumerate(self.units[1 - player])]
-        else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"]!="LBA"]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"]!="LBA"]
 
-        if active_units and active_targets:
-            attack_combinations = [list(attack) for attack in product(active_targets, repeat=len(active_units))]
+        if self.action == "day":
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "BB"]
+            active_targets = [i for i, _ in enumerate(self.units[1 - player])]
         else:
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "LBA"]
+            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != "LBA"]
+
+        if not active_units or not active_targets:
             return []
+
         valid_actions = []
-        for attack in attack_combinations:
-            action = [None] * total_units  # Initialize all actions as None
-            for i, unit_index in enumerate(active_units):
-                action[unit_index] = attack[i]  # Assign attack targets only to active units
-            valid_actions.append(action)
+
+        if len(active_targets) >= len(active_units):
+            for perm in permutations(active_targets, len(active_units)):
+                action = [None] * total_units
+                for unit_idx, target in zip(active_units, perm):
+                    action[unit_idx] = target
+                valid_actions.append(action)
 
         return valid_actions
-
-    def simulate_next(self, actions):
-        states = defaultdict(int)
-        rewards = [0, 0]
-
-        for _ in range(50):
-            new_game = Game(self.units, self.pv, self.action, self.points)  # Create a fresh game each time
-            game, reward, _ = new_game.step(actions)
-            states[game] += 1 
-            rewards = [x + y for x, y in zip(reward, rewards)]
-
-        avg_rewards = [x / 50 for x in rewards]
-        most_visited_state = max(states, key=states.get)
-        return most_visited_state, avg_rewards
-
      
     def get_next_state(self, actions):
-        new_game = Game(self.units, self.pv, self.action, self.points)
+        new_game = Game(units=self.units, pv=self.pv, action=self.action, points=self.points)
         new_game, reward, _ = new_game.step(actions)
         return new_game, reward
     

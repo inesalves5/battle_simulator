@@ -31,6 +31,8 @@ class ChanceNode: #node de chance
     def expand(self):
         """Expands by adding a new child node."""
         game, reward = self.game.get_next_state([self.j_action, self.a_action])
+        if game == self.game:
+            return self
         child_node = DecisionNode(copy.deepcopy(game), self.max_reward, parent=self, action=self.a_action)
         if child_node in self.children:
             return child_node
@@ -44,6 +46,8 @@ class ChanceNode: #node de chance
     
     def add_child(self, child):
         """Adds a child node."""
+        if child in self.children:
+            return 
         self.children.append(child)
     
     def __eq__(self, other):
@@ -98,6 +102,8 @@ class DecisionNode: #node para as acoes
         
     def add_child(self, child):
         """Adds a child node."""
+        if child in self.children:
+            return 
         self.children.append(child)
               
     def __eq__(self, other):

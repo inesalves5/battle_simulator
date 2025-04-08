@@ -6,7 +6,7 @@ import copy
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def hierarchy_pos(G, root=None, width=2, vert_gap=0.1, xcenter=0.5):
+def hierarchy_pos(G, root=None, width=10, vert_gap=0.3, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
     pos = _hierarchy_pos(G, root, width, vert_gap, xcenter)
     return pos
@@ -36,7 +36,7 @@ def visualize_mcts(root):
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"Jap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nVisits: {node.visits}\nPoints: {node.value}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
+        node_label = f"Jap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nVisits: {node.visits}\nPoints: {round(node.value[0], 2)}, {round(node.value[0], 2)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
         G.add_node(node_id, label=node_label)
 
         # Determine shape: stars for chance nodes, circles otherwise
@@ -58,7 +58,7 @@ def visualize_mcts(root):
     pos = hierarchy_pos(G, root=id(root))
 
     # Plot the tree
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(35, 15))
     labels = nx.get_node_attributes(G, "label")
 
     # Draw nodes separately based on shape
@@ -71,7 +71,7 @@ def visualize_mcts(root):
             nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_size=200, node_color="lightblue")
     
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
-    nx.draw_networkx_labels(G, pos, labels, font_size=6, verticalalignment="center")
+    nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
     plt.title("MCTS Tree Visualization")
     plt.show()
@@ -81,11 +81,12 @@ def choose_random():
         units = json.load(file)
 
     nr_japanese = random.randint(1, 2)
-    japanese = random.sample(units["japanese"], nr_japanese)
+    #japanese = random.sample(units["japanese"], nr_japanese)
     
     nr_allied = random.randint(1, 2)
-    allied = random.sample(units["allied"], nr_allied)
-
+    #allied = random.sample(units["allied"], nr_allied)
+    japanese = [units["japanese"][0], units["japanese"][2]]
+    allied = [units["allied"][0], units["allied"][3]]
     return japanese, allied
     
 
@@ -101,18 +102,14 @@ def represent(game, action, player):
 
 
 def choose_action(units, pv, player):
-    game_day = game.Game(copy.deepcopy(units), pv, "day")
-    game_night = game.Game(copy.deepcopy(units), pv, "night")
-    #res_day, root_day = mcts_round(game_day)
-    #res_night, root_night = mcts_round(game_night)
-    node_day = mcts.DecisionNode(game_day)
-    tree_day = mcts.MCTS(node_day)
-    res_day = tree_day.search(node_day, iterations=100).value 
-    visualize_mcts(node_day)
-    node_night = mcts.DecisionNode(game_night)
-    tree_night = mcts.MCTS(node_night)
-    res_night = tree_night.search(node_night, iterations=100).value
-    visualize_mcts(node_night)
+    game_day = game.Game(units=copy.deepcopy(units), pv=pv, action="day")
+    max_reward_day = game_day.max_reward("day")
+    game_night = game.Game(units=copy.deepcopy(units), pv=pv, action="night")
+    max_reward_night = game_night.max_reward("night")
+    res_day, root_day = mcts_round(game_day, max_reward_day)
+    res_night, root_night = mcts_round(game_night, max_reward_night)
+    visualize_mcts(root_day)
+    visualize_mcts(root_night)
     print("Day result:", res_day)
     print("Night result:", res_night)
     return "day" if res_day[player] > res_night[player] else "night"
@@ -123,36 +120,56 @@ def mcts_round(game_state, max_reward):
     node = mcts.DecisionNode(game_state, max_reward=max_reward)
     tree = mcts.MCTS(node)
     while not done:
-        j_node = tree.search(node, iterations=20) #find action for japanese
+        j_node = tree.search(node, iterations=3000) #find action for japanese
         j_action = j_node.action
         if j_action == None:
             print("No action found for japanese")
             return rewards, tree.root
         represent(node.game, j_action, 0)
-        a_node = tree.search(j_node, iterations=20) #find action for allied
+        a_node = tree.search(j_node, iterations=3000) #find action for allied
         a_action = a_node.a_action
         if a_action == None:
             print("No action found for allied")
             return rewards, tree.root
         represent(node.game, a_action, 1)
-        game_state, reward, done = a_node.game.step([j_action, a_action]) 
-        node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0)
-        a_node.add_child(node)
-        rewards = [x+y for x, y in zip(rewards, reward)]
+        game_state, reward, done = game_state.step([j_action, a_action])
+        if game_state != node.game:
+            node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0)
+            a_node.add_child(node)
+            rewards = [x+y for x, y in zip(rewards, reward)]
     rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, tree.root
 
+def read_units(data):
+    result = []
+    for unit in data:
+        attack = {"Air": 0, "Sea": 0}
+        is_elite = {"Air": None, "Sea": None}
+        
+        for area in unit["attackDomains"]:
+            attack[area["domain"]] = area["attack"]
+        
+        transformed_unit = {
+            "attack": [attack["Air"], attack["Sea"]],
+            "isElite": [is_elite["Air"], is_elite["Sea"]],
+            "defense": unit["stepsMax"], 
+            "damage": 0,
+            "availability": 1, 
+            "type": unit["type"]
+        }
+        
+        result.append(transformed_unit)
+    
+    return result
+
 def main():
     japanese, allied = choose_random()
-    units = [
-            [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "availability": 1, "type": unit["type"]} for unit in japanese],
-            [{"attack": [area["attack"] for area in unit["attackDomains"]], "isElite": [area["isElite"] for area in unit["attackDomains"]], "defense": unit["stepsMax"], "damage": 0, "availability": 1, "type": unit["type"]} for unit in allied], 
-    ]
+    units = [read_units(japanese), read_units(allied)]
     pv = [random.randint(1, 3), random.randint(1, 3)]
     player = 0 #playing as player "japanese"
-    action = "day" #choose_action(units, pv, player) #choosing best action for player    
-    #print("Best action is:", action)
-    game_state = game.Game(units, pv, action)
+    action = choose_action(units, pv, player) #choosing best action for player    
+    print("Best action is:", action)
+    game_state = game.Game(units=units, pv=pv, action=action)
     max_reward = game_state.max_reward(action)
     print("Max reward:", max_reward)
     result, root = mcts_round(copy.deepcopy(game_state), max_reward) 

@@ -34,20 +34,27 @@ class ChanceNode: #node de chance
         if game == self.game:
             return self
         child_node = DecisionNode(copy.deepcopy(game), self.max_reward, parent=self, action=self.a_action)
-        if child_node in self.children:
-            return child_node
+        for existing_child in self.children:
+            if existing_child == child_node:
+                existing_child.update_value(reward)
+                return existing_child
         self.children.append(child_node)
         return child_node
 
     def update(self, result):
         """Updates node statistics after a simulation."""
         self.visits += 1
+        self.update_value(result)
+        
+    def update_value(self, result):
         self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
     
-    def add_child(self, child):
+    def add_child(self, child, reward):
         """Adds a child node."""
-        if child in self.children:
-            return 
+        for existing_child in self.children:
+            if existing_child == child:
+                existing_child.update_value(reward)
+                return existing_child
         self.children.append(child)
     
     def __eq__(self, other):
@@ -63,7 +70,7 @@ class DecisionNode: #node para as acoes
         self.children = []
         self.visits = 0
         self.value = value
-        self.action = action
+        self.action = action if player == 1 else "Not Applicable"
         self.untried_actions = list(game.actions_available(player))
         self.player = player
 
@@ -98,11 +105,15 @@ class DecisionNode: #node para as acoes
     def update(self, result):
         """Updates node statistics after a simulation."""
         self.visits += 1
+        self.update_value(result)
+        
+    def update_value(self, result):
         self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
         
-    def add_child(self, child):
+    def add_child(self, child, reward):
         """Adds a child node."""
         if child in self.children:
+            child.update_value(reward)
             return 
         self.children.append(child)
               
@@ -145,7 +156,7 @@ class MCTS:
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
-        rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())]
+        rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())] #sempre empate de zona, quando nao ha jogadas possiveis
         return rewards
 
     def backpropagate(self, node, result):

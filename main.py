@@ -6,7 +6,7 @@ import copy
 import networkx as nx
 import matplotlib.pyplot as plt
 
-def hierarchy_pos(G, root=None, width=10, vert_gap=0.3, xcenter=0.5):
+def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
     pos = _hierarchy_pos(G, root, width, vert_gap, xcenter)
     return pos
@@ -36,7 +36,7 @@ def visualize_mcts(root):
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"Jap: {len(node.game.units[0])} Al: {len(node.game.units[1])}\nVisits: {node.visits}\nPoints: {round(node.value[0], 2)}, {round(node.value[0], 2)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
+        node_label = f"{len(node.game.units[0])}:{len(node.game.units[1])}\n{node.visits}\n{round(node.value[0], 4)}, {round(node.value[1], 4)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
         G.add_node(node_id, label=node_label)
 
         # Determine shape: stars for chance nodes, circles otherwise
@@ -58,7 +58,7 @@ def visualize_mcts(root):
     pos = hierarchy_pos(G, root=id(root))
 
     # Plot the tree
-    plt.figure(figsize=(35, 15))
+    plt.figure(figsize=(35, 20))
     labels = nx.get_node_attributes(G, "label")
 
     # Draw nodes separately based on shape
@@ -73,7 +73,7 @@ def visualize_mcts(root):
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    plt.title("MCTS Tree Visualization")
+    plt.title(f"MCTS Tree Visualization for {root.game.action} action")
     plt.show()
     
 def choose_random():
@@ -86,7 +86,7 @@ def choose_random():
     nr_allied = random.randint(1, 2)
     #allied = random.sample(units["allied"], nr_allied)
     japanese = [units["japanese"][0], units["japanese"][2]]
-    allied = [units["allied"][0], units["allied"][3]]
+    allied = [units["allied"][3], units["allied"][0]]
     return japanese, allied
     
 
@@ -135,7 +135,7 @@ def mcts_round(game_state, max_reward):
         game_state, reward, done = game_state.step([j_action, a_action])
         if game_state != node.game:
             node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0)
-            a_node.add_child(node)
+            a_node.add_child(node, reward)
             rewards = [x+y for x, y in zip(rewards, reward)]
     rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, tree.root
@@ -166,8 +166,12 @@ def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
     pv = [random.randint(1, 3), random.randint(1, 3)]
-    player = 0 #playing as player "japanese"
-    action = choose_action(units, pv, player) #choosing best action for player    
+    action_j = choose_action(units, pv, 0) #choosing best action for japanese    
+    action_a = choose_action(units, pv, 1) #choosing best action for allied   
+    if action_a == action_j:
+        action = action_a
+    else:
+        action = action_j if len(units[0]) > len(units[1]) else action_a
     print("Best action is:", action)
     game_state = game.Game(units=units, pv=pv, action=action)
     max_reward = game_state.max_reward(action)

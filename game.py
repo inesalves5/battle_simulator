@@ -6,12 +6,11 @@ from collections import defaultdict
 
 class Game:
     
-    def __init__(self, units, pv, action, points = [0, 0]):
+    def __init__(self, units, pv, action):
         #eles usam (A)S-D-V - aereo, superficie, defesa, velocidade
         self.units = units
         self.action = action
         self.pv = pv
-        self.points = points
 
     def step(self, actions):
         reward = [0, 0]
@@ -20,21 +19,19 @@ class Game:
             units = self.units[player]
             opponent = self.units[1-player]
             for i in range(len(action)):
-                if action[i] != None and self.damage(units[i], opponent[action[i]]):
-                    reward = [x+y for x, y in zip(reward, self.reward(self.action, player, opponent[action[i]]))]
-        points = [x+y for x, y in zip(self.points, reward)]
-        j_units = [unit for unit in self.units[0] if unit["damage"] != float("inf")]
-        a_units = [unit for unit in self.units[1] if unit["damage"] != float("inf")]
-        new = Game([j_units, a_units], self.pv, self.action, points)
+                if action[i] != None:
+                    state = self.damage(units[i], opponent[action[i]])
+                    damage = self.reward(self.action, player, opponent[action[i]])
+                    percentage = state / opponent[action[i]]["defense"] if state != float("inf") else 1
+                    reward = [x+percentage*y for x, y in zip(reward, damage)]
+        j_units = [unit for unit in self.units[0] if unit["availability"] != 0]
+        a_units = [unit for unit in self.units[1] if unit["availability"] != 0]
+        new = Game([j_units, a_units], self.pv, self.action)
         return new, reward, new.is_terminal()
     
     def is_terminal(self):
         aa0 = self.actions_available(0)
-        if all([a is None for a in aa0]):
-            self.units[0]=[]
         aa1 = self.actions_available(1)
-        if all([a is None for a in aa1]):
-            self.units[1]=[]
         return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
@@ -62,7 +59,7 @@ class Game:
         index = 0 if self.action == "day" else 1
         bonus = 1 if attacker["isElite"][index] else 0
         if (state == float("inf")):
-            return False
+            return 0
         for _ in range(attacker["attack"][index]):
             if random.randint(1, 6) + bonus >= 6:
                 hits += 1
@@ -75,17 +72,24 @@ class Game:
                 state = float('inf')
                 break
         victim["damage"] = state
+        if state != float("inf"):
+            victim["availability"] -= round(state / victim["defense"], 2)
+            victim["availability"] = max(victim["availability"], 0)
         if hits:
             victim["isElite"] = [False, False] 
             if state == victim["defense"]:
                 victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
-        return hits
+        return state
     
     def reward_zone(self):
-        if len(self.units[0]) < len(self.units[1]):
-            return [-self.pv[0], self.pv[0]]
-        if len(self.units[1]) < len(self.units[0]):
-            return [self.pv[1], -self.pv[1]]
+        if len(self.units[0]) and len(self.units[1]) == 0:
+            return [self.pv[0], -self.pv[0]]
+        if len(self.units[1]) and len(self.units[0]) == 0:
+            return [-self.pv[1], self.pv[1]]
+        if all([a is None for a in self.actions_available(0)]) and not all([a is None for a in self.actions_available(1)]):
+            return [-self.pv[1], self.pv[1]]
+        if all([a is None for a in self.actions_available(1)]) and not all([a is None for a in self.actions_available(0)]):
+            return [self.pv[0], -self.pv[0]]
         return [0, 0]
 
     def actions_available(self, player):
@@ -113,15 +117,9 @@ class Game:
         return valid_actions
      
     def get_next_state(self, actions):
-        new_game = Game(units=self.units, pv=self.pv, action=self.action, points=self.points)
+        new_game = Game(units=self.units, pv=self.pv, action=self.action)
         new_game, reward, _ = new_game.step(actions)
         return new_game, reward
     
-    def japanese(self):
-        return self.units[0]
-    
-    def allied(self):
-        return self.units[1]
-    
     def __eq__(self, other):
-        return isinstance(other, Game) and self.units == other.units and self.pv == other.pv and self.action == other.action and self.points == other.points
+        return isinstance(other, Game) and self.units == other.units and self.pv == other.pv and self.action == other.action 

@@ -149,7 +149,7 @@ class MCTS:
 
     def simulate(self, game):
         """Performs a random playout and returns result."""
-        current_game = game
+        current_game = copy.deepcopy(game)
         rewards = [0, 0]
         while not current_game.is_terminal():
             j_action = random.choice(list(current_game.actions_available(0)))

@@ -58,7 +58,7 @@ def visualize_mcts(root):
     pos = hierarchy_pos(G, root=id(root))
 
     # Plot the tree
-    plt.figure(figsize=(35, 20))
+    plt.figure(figsize=(20, 10))
     labels = nx.get_node_attributes(G, "label")
 
     # Draw nodes separately based on shape
@@ -104,10 +104,12 @@ def represent(game, action, player):
 def choose_action(units, pv, player):
     game_day = game.Game(units=copy.deepcopy(units), pv=pv, action="day")
     max_reward_day = game_day.max_reward("day")
+    print("Max reward day:", max_reward_day)
     game_night = game.Game(units=copy.deepcopy(units), pv=pv, action="night")
     max_reward_night = game_night.max_reward("night")
-    res_day, root_day = mcts_round(game_day, max_reward_day)
-    res_night, root_night = mcts_round(game_night, max_reward_night)
+    print("Max reward night:", max_reward_night)
+    res_day, root_day, _ = mcts_round(game_day, max_reward_day)
+    res_night, root_night, _ = mcts_round(game_night, max_reward_night)
     visualize_mcts(root_day)
     visualize_mcts(root_night)
     print("Day result:", res_day)
@@ -119,26 +121,29 @@ def mcts_round(game_state, max_reward):
     rewards = [0, 0]
     node = mcts.DecisionNode(game_state, max_reward=max_reward)
     tree = mcts.MCTS(node)
+    actions = []
     while not done:
         j_node = tree.search(node, iterations=100000) #find action for japanese
         j_action = j_node.action
+        actions.append(j_action)
         if j_action == None:
             print("No action found for japanese")
             return rewards, tree.root
-        represent(node.game, j_action, 0)
+        #represent(node.game, j_action, 0)
         a_node = tree.search(j_node, iterations=100000) #find action for allied
         a_action = a_node.a_action
+        actions.append(a_action)
         if a_action == None:
             print("No action found for allied")
             return rewards, tree.root
-        represent(node.game, a_action, 1)
+        #represent(node.game, a_action, 1)
         game_state, reward, done = game_state.step([j_action, a_action])
         if game_state != node.game:
             node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0, value=reward)
             a_node.add_child(node, reward)
             rewards = [x+y for x, y in zip(rewards, reward)]
     rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
-    return rewards, tree.root
+    return rewards, tree.root, actions
 
 def read_units(data):
     result = []
@@ -165,38 +170,40 @@ def read_units(data):
 def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
-    pv = [random.randint(1, 3), random.randint(1, 3)]
+    pv = [1,1] #[random.randint(1, 3), random.randint(1, 3)]
     action_j = choose_action(units, pv, 0) #choosing best action for japanese    
+    print("Best action for Japanese is:", action_j)
     action_a = choose_action(units, pv, 1) #choosing best action for allied   
+    print("Best action for Allied is:", action_a)
     if action_a == action_j:
         action = action_a
     else:
-        action = action_j if len(units[0]) > len(units[1]) else action_a
-    print("Best action is:", action)
+        action = action_j if len(units[0]) > len(units[1]) else action_a #na verdade joga dia seguido de noite
+    print("Chosen action is:", action)
     game_state = game.Game(units=units, pv=pv, action=action)
     max_reward = game_state.max_reward(action)
     print("Max reward:", max_reward)
-    result, root = mcts_round(copy.deepcopy(game_state), max_reward) 
+    result, root, _ = mcts_round(copy.deepcopy(game_state), max_reward) 
     visualize_mcts(root)
     return result
 
 def testing():
+    file = open("results.txt", "w")
+
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
-    pv = [random.randint(1, 3), random.randint(1, 3)]
+    pv = [1, 1] #[random.randint(1, 3), random.randint(1, 3)]
     action = "day"
     game_state = game.Game(units=units, pv=pv, action=action)
     max_reward = game_state.max_reward(action)
-
-    result, root = mcts_round(copy.deepcopy(game_state), max_reward) 
-    visualize_mcts(root)
-    """
-    game_state, result, done = game_state.step([[0, None], [1, None]])
-    print(game_state.units)
-    """
-
-    return result 
+    
+    for _ in range(50):
+        result, root, actions = mcts_round(copy.deepcopy(game_state), max_reward) 
+        file.write(f"Root: {root.value} Result: {result}, Actions: {actions}\n")
+        #visualize_mcts(root)
+    file.close()
+    return  
 
 if __name__ == "__main__":
-    print(testing())
+    print(main())
     

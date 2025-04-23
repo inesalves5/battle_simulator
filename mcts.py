@@ -119,7 +119,7 @@ class DecisionNode: #node para as acoes
               
     def __eq__(self, other):
         return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
-                self.parent == other.parent and self.untried_actions == other.untried_actions and self.player == other.player
+                self.parent == other.parent and self.player == other.player and self.untried_actions == other.untried_actions
 
 class MCTS:
     def __init__(self, root):
@@ -156,7 +156,7 @@ class MCTS:
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
-        rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())] #sempre empate de zona, quando nao ha jogadas possiveis
+        rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())] 
         return rewards
 
     def backpropagate(self, node, result):

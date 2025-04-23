@@ -35,12 +35,12 @@ class Game:
         return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
-        rewards = [0, 0]
+        rewards = 0
         for unit in self.units[0]:
-            rewards = [x+y for x, y in zip(rewards, self.reward(action, 0, unit))]
+            rewards += self.reward(action, 1, unit)[0]
         for unit in self.units[1]:
-            rewards = [x+y for x, y in zip(rewards, self.reward(action, 0, unit))]
-        return max(rewards)
+            rewards += self.reward(action, 0, unit)[0]
+        return abs(rewards)
         
     def reward(self, action, player, victim):
         if action == "day" and victim["type"] == "LBA":
@@ -48,7 +48,7 @@ class Game:
         elif action == "day":
             damage = 3 * victim["attack"][0] + victim["defense"]
         elif victim["type"] == "LBA":
-            damage = 0
+            return [0, 0]
         else:
             damage = 2 * victim["attack"][1] + victim["defense"]
         return [damage, -damage] if player == 0 else [-damage, damage]
@@ -56,6 +56,7 @@ class Game:
     def damage(self, attacker, victim):
         hits = 0
         state = victim["damage"]
+        rolls = 0
         index = 0 if self.action == "day" else 1
         bonus = 1 if attacker["isElite"][index] else 0
         if (state == float("inf")):
@@ -65,6 +66,7 @@ class Game:
                 hits += 1
         for _ in range(hits):
             roll = random.randint(1, 6) + bonus 
+            rolls += roll
             state += roll      
             if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda
                 victim["availability"] -= round(state / victim["defense"], 2)
@@ -79,7 +81,7 @@ class Game:
             victim["isElite"] = [False, False] 
             if state == victim["defense"]:
                 victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
-        return state
+        return rolls
     
     def reward_zone(self):
         if len(self.units[0]) and len(self.units[1]) == 0:
@@ -91,7 +93,7 @@ class Game:
         if all([a is None for a in self.actions_available(1)]) and not all([a is None for a in self.actions_available(0)]):
             return [self.pv[0], -self.pv[0]]
         return [0, 0]
-
+    
     def actions_available(self, player):
         total_units = len(self.units[player])
 

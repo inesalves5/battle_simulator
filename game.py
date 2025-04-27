@@ -20,10 +20,15 @@ class Game:
             opponent = self.units[1-player]
             for i in range(len(action)):
                 if action[i] != None:
-                    state = self.damage(units[i], opponent[action[i]])
-                    damage = self.reward(self.action, player, opponent[action[i]])
-                    percentage = state / opponent[action[i]]["defense"] if state != float("inf") else 1
-                    reward = [x+percentage*y for x, y in zip(reward, damage)]
+                initial_availability = opponent[action[i]]["availability"]
+                state = self.damage(units[i], opponent[action[i]])
+                damage = self.reward(self.action, player, opponent[action[i]])
+                final_availability = opponent[action[i]]["availability"]
+                if final_availability == 0:
+                    reward = [x + y for x, y in zip(reward, damage)]
+                else:
+                    proportion = (initial_availability - final_availability) / initial_availability
+                    reward = [x + proportion * y for x, y in zip(reward, damage)]
         j_units = [unit for unit in self.units[0] if unit["availability"] != 0]
         a_units = [unit for unit in self.units[1] if unit["availability"] != 0]
         new = Game([j_units, a_units], self.pv, self.action)
@@ -35,12 +40,12 @@ class Game:
         return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
-        rewards = 0
+        reward_j, reward_a = 0, 0
         for unit in self.units[0]:
-            rewards += self.reward(action, 1, unit)[0]
+            reward_a += self.reward(action, 1, unit)[1]
         for unit in self.units[1]:
-            rewards += self.reward(action, 0, unit)[0]
-        return abs(rewards)
+            reward_j += self.reward(action, 0, unit)[0]
+        return max(reward_j, reward_a)
         
     def reward(self, action, player, victim):
         if action == "day" and victim["type"] == "LBA":

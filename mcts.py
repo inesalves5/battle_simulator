@@ -5,6 +5,7 @@ import copy
 class ChanceNode: #node de chance
     def __init__(self, game, parent, j_action, a_action):
         self.game = game
+        self.original_game = copy.deepcopy(game)
         self.parent = parent
         self.children = []
         self.visits = 0
@@ -12,6 +13,7 @@ class ChanceNode: #node de chance
         self.j_action = j_action
         self.a_action = a_action
         self.max_reward = parent.max_reward
+        self.avg = [0, 0]
 
     def is_fully_expanded(self):
         return False
@@ -36,16 +38,17 @@ class ChanceNode: #node de chance
         child_node = DecisionNode(copy.deepcopy(game), self.max_reward, parent=self, action=self.a_action)
         for existing_child in self.children:
             if existing_child == child_node:
-                existing_child.update_value(reward)
+                existing_child.update(reward)
                 return existing_child
         self.children.append(child_node)
         return child_node
 
     def update(self, result):
         """Updates node statistics after a simulation."""
-        self.visits += 1
         self.update_value(result)
-        
+        self.avg = [r + v for r, v in zip(result, self.avg)]
+        self.visits += 1
+
     def update_value(self, result):
         self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
     
@@ -53,7 +56,7 @@ class ChanceNode: #node de chance
         """Adds a child node."""
         for existing_child in self.children:
             if existing_child == child:
-                existing_child.update_value(reward)
+                existing_child.update(reward)
                 return existing_child
         self.children.append(child)
     
@@ -65,6 +68,7 @@ class ChanceNode: #node de chance
 class DecisionNode: #node para as acoes 
     def __init__(self, game, max_reward, parent=None, action=None, value=[0, 0], player=0): 
         self.game = game
+        self.original_game = copy.deepcopy(game)
         self.max_reward = max_reward   
         self.parent = parent
         self.children = []
@@ -73,6 +77,7 @@ class DecisionNode: #node para as acoes
         self.action = action if player == 1 else "Not Applicable"
         self.untried_actions = list(game.actions_available(player))
         self.player = player
+        self.avg = [0, 0]
 
     def is_fully_expanded(self):
         return len(self.untried_actions) == 0
@@ -104,16 +109,17 @@ class DecisionNode: #node para as acoes
     
     def update(self, result):
         """Updates node statistics after a simulation."""
-        self.visits += 1
         self.update_value(result)
-        
+        self.avg = [r + v for r, v in zip(result, self.avg)]
+        self.visits += 1
+
     def update_value(self, result):
-        self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
+        self.value = [(r + v * self.visits) / (self.visits + 1) for v, r in zip(self.value, result)]
         
     def add_child(self, child, reward):
         """Adds a child node."""
         if child in self.children:
-            child.update_value(reward)
+            child.update(reward)
             return 
         self.children.append(child)
               

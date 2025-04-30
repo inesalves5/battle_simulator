@@ -13,24 +13,25 @@ class Game:
         self.pv = pv
 
     def step(self, actions):
+        game_copy = copy.deepcopy(self)
         reward = [0, 0]
         for player in range(2):
             action = actions[player]
-            units = self.units[player]
-            opponent = self.units[1-player]
+            units = game_copy.units[player]
+            opponent = game_copy.units[1-player]
             for i in range(len(action)):
                 if action[i] != None:
-                initial_availability = opponent[action[i]]["availability"]
-                state = self.damage(units[i], opponent[action[i]])
-                damage = self.reward(self.action, player, opponent[action[i]])
-                final_availability = opponent[action[i]]["availability"]
-                if final_availability == 0:
-                    reward = [x + y for x, y in zip(reward, damage)]
-                else:
-                    proportion = (initial_availability - final_availability) / initial_availability
-                    reward = [x + proportion * y for x, y in zip(reward, damage)]
-        j_units = [unit for unit in self.units[0] if unit["availability"] != 0]
-        a_units = [unit for unit in self.units[1] if unit["availability"] != 0]
+                    initial_availability = opponent[action[i]]["availability"]
+                    state = game_copy.damage(units[i], opponent[action[i]])
+                    damage = game_copy.reward(self.action, player, opponent[action[i]])
+                    final_availability = opponent[action[i]]["availability"]
+                    if final_availability == 0:
+                        reward = [x + y for x, y in zip(reward, damage)]
+                    else:
+                        proportion = (initial_availability - final_availability) / initial_availability
+                        reward = [x + proportion * y for x, y in zip(reward, damage)]
+        j_units = [unit for unit in game_copy.units[0] if unit["availability"] != 0]
+        a_units = [unit for unit in game_copy.units[1] if unit["availability"] != 0]
         new = Game([j_units, a_units], self.pv, self.action)
         return new, reward, new.is_terminal()
     
@@ -42,7 +43,8 @@ class Game:
     def max_reward(self, action): #fazemos para 0 porque é igual
         reward_j, reward_a = 0, 0
         for unit in self.units[0]:
-            reward_a += self.reward(action, 1, unit)[1]
+            reward = self.reward(action, 1, unit)[1]
+            reward_a += reward
         for unit in self.units[1]:
             reward_j += self.reward(action, 0, unit)[0]
         return max(reward_j, reward_a)
@@ -124,8 +126,7 @@ class Game:
         return valid_actions
      
     def get_next_state(self, actions):
-        new_game = Game(units=self.units, pv=self.pv, action=self.action)
-        new_game, reward, _ = new_game.step(actions)
+        new_game, reward, _ = self.step(actions)
         return new_game, reward
     
     def __eq__(self, other):

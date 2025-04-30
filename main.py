@@ -36,7 +36,7 @@ def visualize_mcts(root):
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"{[u["damage"] for u in node.original_game.units[0]]}\n{[u["damage"] for u in node.original_game.units[1]]}\n{node.avg[0]}\n{node.visits}\n{round(node.value[0], 4)}, {round(node.value[1], 4)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
+        node_label = f"{[u["damage"] for u in node.original_game.units[0]]}\n{[u["damage"] for u in node.original_game.units[1]]}\n{node.visits}\n{round(node.value[0], 2)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
         G.add_node(node_id, label=node_label)
 
         # Determine shape: stars for chance nodes, circles otherwise
@@ -121,11 +121,12 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward):
+def mcts_round(game_state, max_reward, final=False):
     done = game_state.is_terminal()
     rewards = [0, 0]
-    node = mcts.DecisionNode(game_state, max_reward=max_reward)
-    tree = mcts.MCTS(node)
+    root = mcts.DecisionNode(game_state, max_reward=max_reward)
+    tree = mcts.MCTS(root)
+    node = root
     actions = []
     while not done:
         j_node = tree.search(node, iterations=1000) #find action for japanese
@@ -143,10 +144,17 @@ def mcts_round(game_state, max_reward):
             return rewards, tree.root
         #represent(node.game, a_action, 1)
         game_state, reward, done = game_state.step([j_action, a_action])
-        if game_state != node.game:
+        if final:
+            print("Reward for ", [j_action, a_action], "is: ", reward, "and is done?", done)
+        rewards = [x + y for x, y in zip(rewards, reward)]
+        for child in a_node.children:
+            if child.game == game_state:
+                node = child
+                break
+        else:
+            # Caso não exista ainda (raro se simulação foi feita corretamente), recria e adiciona
             node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0, value=reward)
             a_node.add_child(node, reward)
-            rewards = [x+y for x, y in zip(rewards, reward)]
     rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, tree.root, actions, node
 
@@ -172,31 +180,35 @@ def read_units(data):
     
     return result
 
+
 def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
     pv = [0,0] #[random.randint(1, 3), random.randint(1, 3)]
     action = choose_action(units, pv) 
+    root_night = None
     if action != "day and night":
         print("Chosen action is:", action)
         game_state = game.Game(units=units, pv=pv, action=action)
         max_reward = game_state.max_reward(action)
-        result, root, _, _ = mcts_round(copy.deepcopy(game_state), max_reward) 
-        visualize_mcts(root)
+        result, root, actions, _ = mcts_round(copy.deepcopy(game_state), max_reward, True) 
     else:
         print("No consensus on action - day followed by night")
         game_state = game.Game(units=units, pv=pv, action="day")
         max_reward = game_state.max_reward("day")
-        result, root, _, node = mcts_round(copy.deepcopy(game_state), max_reward) 
-        visualize_mcts(root)
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, True) 
         game_state_night = game.Game(units=copy.deepcopy(node.game.units), pv=pv, action="night")
         if not game_state_night.is_terminal():
-            result_night, root_night, _, _ = mcts_round(copy.deepcopy(game_state_night), max_reward)
+            result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward, True)
+            actions.append(n_actions)
             result = [x+y for x, y in zip(result, result_night)]       
-            visualize_mcts(root_night)
         else:
-            print("Game is already over.")
-    return result, root.value, action
+            print("Game was already over before night action started.")
+    print("Units at end: ", [u["damage"] for u in node.game.units[0]], [u["damage"] for u in node.game.units[1]])
+    visualize_mcts(root)
+    if root_night:
+        visualize_mcts(root_night)
+    return result, root.value, action, actions
 
 def testing():
     file = open("results.txt", "w")

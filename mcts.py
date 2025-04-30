@@ -32,10 +32,11 @@ class ChanceNode: #node de chance
 
     def expand(self):
         """Expands by adding a new child node."""
-        game, reward = self.game.get_next_state([self.j_action, self.a_action])
-        if game == self.game:
+        game_copy = copy.deepcopy(self.game)
+        game_copy, reward = game_copy.get_next_state([self.j_action, self.a_action])
+        if game_copy == self.game:
             return self
-        child_node = DecisionNode(copy.deepcopy(game), self.max_reward, parent=self, action=self.a_action)
+        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, value=reward)
         for existing_child in self.children:
             if existing_child == child_node:
                 existing_child.update(reward)
@@ -57,7 +58,7 @@ class ChanceNode: #node de chance
         for existing_child in self.children:
             if existing_child == child:
                 existing_child.update(reward)
-                return existing_child
+                return 
         self.children.append(child)
     
     def __eq__(self, other):
@@ -74,7 +75,7 @@ class DecisionNode: #node para as acoes
         self.children = []
         self.visits = 0
         self.value = value
-        self.action = action if player == 1 else "Not Applicable"
+        self.action = action if player == 1 else " "
         self.untried_actions = list(game.actions_available(player))
         self.player = player
         self.avg = [0, 0]
@@ -118,9 +119,10 @@ class DecisionNode: #node para as acoes
         
     def add_child(self, child, reward):
         """Adds a child node."""
-        if child in self.children:
-            child.update(reward)
-            return 
+        for existing_child in self.children:
+            if existing_child == child:
+                existing_child.update(reward)
+                return 
         self.children.append(child)
               
     def __eq__(self, other):

@@ -43,11 +43,11 @@ def visualize_mcts(root):
         if isinstance(node, mcts.DecisionNode) and node.player == 0:
             node_label = f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[0]]}" \
                         f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[1]]}\n" \
-                        f"{node.visits, round(node.value[1], 2)}"
+                        f"{node.visits}\n{round(node.value[1], 2)}"
         elif isinstance(node, mcts.ChanceNode):
-            node_label = f"{node.visits, round(node.value[1], 2)}"
+            node_label = f"{node.visits}\n{round(node.value[1], 2)}"
         else:
-            node_label = f"{node.visits, round(node.value[0], 2)}"
+            node_label = f"{node.visits}\n{round(node.value[0], 2)}"
         
         G.add_node(node_id, label=node_label, node_obj=node)  # Store node_obj for reference
 
@@ -140,7 +140,7 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round_right(game_state, max_reward, iterations=2):
+def mcts_round_right(game_state, max_reward, iterations=1):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward)
@@ -170,7 +170,7 @@ def mcts_round_right(game_state, max_reward, iterations=2):
     rewards = [x + y for x, y in zip(rewards, game_state.reward_zone())]
     return rewards, tree.root, actions, current_node
 
-def mcts_round(game_state, max_reward, iterations=4):
+def mcts_round(game_state, max_reward, iterations=2):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0)
@@ -186,8 +186,7 @@ def mcts_round(game_state, max_reward, iterations=4):
             print(f"No action found for {"Japanese" if node.player == 0 else "Allied"}")
             return rewards, tree.root, actions, node
     rewards = [x + y for x, y in zip(rewards, node.original_game.reward_zone())]
-    if node.visits == 0:
-        tree.backpropagate(node, rewards)
+    tree.backpropagate(node, rewards)
     print("Final rewards:", rewards)
     return rewards, tree.root, actions, node
 

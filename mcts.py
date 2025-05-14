@@ -3,7 +3,7 @@ import random
 import copy
 
 class ChanceNode: #node de chance
-    def __init__(self, game, parent, j_action, a_action):
+    def __init__(self, game, parent, j_action, a_action, reward=[0, 0]):
         self.original_game = copy.deepcopy(game)
         self.game = game
         self.parent = parent
@@ -13,7 +13,8 @@ class ChanceNode: #node de chance
         self.j_action = j_action
         self.a_action = a_action
         self.max_reward = parent.max_reward
-
+        self.reward = reward
+        
     def is_fully_expanded(self):
         return False
     
@@ -30,7 +31,7 @@ class ChanceNode: #node de chance
         game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
         if game_copy == self.original_game:
             return self.expand()
-        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action)
+        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)])
         for existing_child in self.children:
             if existing_child == child_node:
                 return existing_child, reward
@@ -56,9 +57,16 @@ class ChanceNode: #node de chance
         return isinstance(other, ChanceNode) and self.game == other.game and self.a_action == other.a_action and\
                 self.j_action == other.j_action and self.parent == other.parent 
                 
+    def __str__(self):
+        final = ""
+        for player in range(2):
+            final += f"Player {player}:\n"
+            for unit in self.game.units[player]:
+                final += f"  {unit['type']} (Damage: {unit['damage']})\n"
+        return final
 
 class DecisionNode: #node para as acoes 
-    def __init__(self, game, max_reward, parent=None, action=None, player=0):         
+    def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0]):         
         self.original_game = copy.deepcopy(game)
         self.game = game
         self.max_reward = max_reward   
@@ -69,6 +77,7 @@ class DecisionNode: #node para as acoes
         self.action = action if player == 1 else " "
         self.untried_actions = list(game.actions_available(player))
         self.player = player
+        self.reward = reward
 
     def is_fully_expanded(self):
         return len(self.untried_actions) == 0
@@ -88,9 +97,9 @@ class DecisionNode: #node para as acoes
             if isinstance(child, ChanceNode) and child.a_action == action:
                 return child, [0, 0]
         if self.player == 0:
-            child_node = DecisionNode(copy.deepcopy(self.game), self.max_reward, parent=self, player=1-self.player, action=action)
+            child_node = DecisionNode(copy.deepcopy(self.game), self.max_reward, parent=self, player=1-self.player, action=action, reward=self.reward)
         else:
-            child_node = ChanceNode(copy.deepcopy(self.game), parent=self, j_action=self.action, a_action=action)
+            child_node = ChanceNode(copy.deepcopy(self.game), parent=self, j_action=self.action, a_action=action, reward=self.reward)
         self.children.append(child_node)
         return child_node, [0, 0]
     
@@ -109,19 +118,26 @@ class DecisionNode: #node para as acoes
     def __eq__(self, other):
         return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
                 self.parent == other.parent and self.player == other.player and self.untried_actions == other.untried_actions
-
+    
+    def __str__(self):
+        final = ""
+        for player in range(2):
+            final += f"Player {player}:\n"
+            for unit in self.game.units[player]:
+                final += f"  {unit['type']} (Damage: {unit['damage']})\n"
+        return final
+    
 class MCTS:
     def __init__(self, root):
         self.root = root
     
     def search(self, node, iterations):
         for _ in range(iterations):
-            self.sample()
+            self.sample(node)
         return node.best_child()
     
-    def sample(self):
-        node = self.root
-        rewards = [0, 0]
+    def sample(self, node):
+        rewards = node.reward
         while not node.original_game.is_terminal():
             if isinstance(node, ChanceNode):
                 node, reward = node.expand()
@@ -131,9 +147,9 @@ class MCTS:
                 rewards = [x+y for x, y in zip(reward, rewards)]
                 break
             else:
-                node, reward = self.select_action(node)
-                rewards = [x+y for x, y in zip(reward, rewards)]
-        rewards = [x+y for x, y in zip(rewards, node.original_game.reward_zone())] 
+                node, _ = self.select_action(node)
+        if node.original_game.is_terminal():
+            rewards = [x+y for x, y in zip(rewards, node.original_game.reward_zone())] 
         self.backpropagate(node, rewards)
         return rewards    
     

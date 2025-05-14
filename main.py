@@ -140,36 +140,6 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round_right(game_state, max_reward, iterations=1):
-    rewards = [0, 0]
-    actions = []
-    root = mcts.DecisionNode(game_state, max_reward=max_reward)
-    tree = mcts.MCTS(root)
-    current_node = root
-    while not current_node.original_game.is_terminal():
-        j_node = tree.search(current_node, iterations=iterations)
-        j_action = j_node.action
-        actions.append(j_action)
-        if j_action is None:
-            print("No action found for Japanese")
-            return rewards, tree.root, actions, current_node
-        #represent(node.game, j_action, 0)
-
-        a_node = tree.search(j_node, iterations=iterations)
-        a_action = a_node.a_action
-        actions.append(a_action)
-        if a_action is None:
-            print("No action found for Allied")
-            return rewards, tree.root, actions, current_node
-        #represent(node.game, a_action, 1)
-
-        current_node, reward = a_node.expand()
-        tree.backpropagate(current_node, reward)
-        rewards = [x + y for x, y in zip(rewards, reward)]
-
-    rewards = [x + y for x, y in zip(rewards, game_state.reward_zone())]
-    return rewards, tree.root, actions, current_node
-
 def mcts_round(game_state, max_reward, iterations=2):
     rewards = [0, 0]
     actions = []
@@ -212,7 +182,7 @@ def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
     pv = [0,0] #[random.randint(1, 3), random.randint(1, 3)]
-    action = "day" #choose_action(units, pv) 
+    action = choose_action(units, pv) 
     root_night = None
     if action != "day and night":
         print("Chosen action is:", action)

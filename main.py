@@ -4,6 +4,7 @@ import game
 import random
 import copy
 import networkx as nx
+import numpy as np
 import matplotlib.pyplot as plt
 
 def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
@@ -34,47 +35,65 @@ def visualize_mcts(root):
     G = nx.DiGraph()
     node_shapes = {}
 
+    # Map from (parent, child) to label (from parent node)
+    edge_labels = {}
+
     def add_edges(node, parent_id=None):
         node_id = id(node)
-        node_label = f"{[u["damage"] for u in node.original_game.units[0]]}\n{[u["damage"] for u in node.original_game.units[1]]}\n{node.visits}\n{round(node.value[0], 2)}\n{node.action if isinstance(node, mcts.DecisionNode) else node.a_action}"
-        G.add_node(node_id, label=node_label)
+        if isinstance(node, mcts.DecisionNode) and node.player == 0:
+            node_label = f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[0]]}" \
+                        f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[1]]}\n" \
+                        f"{node.visits, round(node.value[1], 2)}"
+        elif isinstance(node, mcts.ChanceNode):
+            node_label = f"{node.visits, round(node.value[1], 2)}"
+        else:
+            node_label = f"{node.visits, round(node.value[0], 2)}"
+        
+        G.add_node(node_id, label=node_label, node_obj=node)  # Store node_obj for reference
 
-        # Determine shape: stars for chance nodes, circles otherwise
-        if isinstance(node, mcts.ChanceNode):
+        if node.original_game.is_terminal():
+            node_shapes[node_id] = "square"
+        elif isinstance(node, mcts.ChanceNode):
             node_shapes[node_id] = "star"
         elif node.player == 0:
             node_shapes[node_id] = "japanese"
         else:
             node_shapes[node_id] = "allied"
+
         if parent_id:
             G.add_edge(parent_id, node_id)
+            child_node = node  # since `node_id` corresponds to the current (child) node
+            if isinstance(child_node, mcts.DecisionNode):
+                edge_labels[(parent_id, node_id)] = child_node.action
+            else:
+                edge_labels[(parent_id, node_id)] = child_node.a_action
 
         for child in node.children:
             add_edges(child, node_id)
 
     add_edges(root)
 
-    # Use our custom tree layout
     pos = hierarchy_pos(G, root=id(root))
-
-    # Plot the tree
     plt.figure(figsize=(20, 12))
     labels = nx.get_node_attributes(G, "label")
 
-    # Draw nodes separately based on shape
+    # Draw nodes
     for node_id, shape in node_shapes.items():
-        if shape == "star":
+        if shape == "square":
+            nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_shape="s", node_size=200, node_color="red")
+        elif shape == "star":
             nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_shape="*", node_size=200, node_color="yellow")
         elif shape == "japanese":
             nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_size=200, node_color="pink")
         else:
             nx.draw_networkx_nodes(G, pos, nodelist=[node_id], node_size=200, node_color="lightblue")
-    
+
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    plt.title(f"MCTS Tree Visualization for {root.game.action} action")
-    plt.savefig("mcts_tree.png", format="png")
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
+    plt.title(f"MCTS Tree Visualization for {root.original_game.action} action", fontsize=16)
+    plt.axis("off")
     plt.show()
     
 def choose_random():
@@ -88,7 +107,7 @@ def choose_random():
     #allied = random.sample(units["allied"], nr_allied)
     japanese = [units["japanese"][0], units["japanese"][2]]
     allied = [units["allied"][3], units["allied"][0]]
-    return japanese, japanese
+    return japanese, copy.deepcopy(japanese)
     
 
 def represent(game, action, player):
@@ -121,41 +140,55 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, final=False):
-    done = game_state.is_terminal()
+def mcts_round_right(game_state, max_reward, iterations=2):
     rewards = [0, 0]
+    actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward)
     tree = mcts.MCTS(root)
-    node = root
-    actions = []
-    while not done:
-        j_node = tree.search(node, iterations=1000) #find action for japanese
+    current_node = root
+    while not current_node.original_game.is_terminal():
+        j_node = tree.search(current_node, iterations=iterations)
         j_action = j_node.action
         actions.append(j_action)
-        if j_action == None:
-            print("No action found for japanese")
-            return rewards, tree.root
+        if j_action is None:
+            print("No action found for Japanese")
+            return rewards, tree.root, actions, current_node
         #represent(node.game, j_action, 0)
-        a_node = tree.search(j_node, iterations=1000) #find action for allied
+
+        a_node = tree.search(j_node, iterations=iterations)
         a_action = a_node.a_action
         actions.append(a_action)
-        if a_action == None:
-            print("No action found for allied")
-            return rewards, tree.root
+        if a_action is None:
+            print("No action found for Allied")
+            return rewards, tree.root, actions, current_node
         #represent(node.game, a_action, 1)
-        game_state, reward, done = game_state.step([j_action, a_action])
-        if final:
-            print("Reward for ", [j_action, a_action], "is: ", reward, "and is done?", done)
+
+        current_node, reward = a_node.expand()
+        tree.backpropagate(current_node, reward)
         rewards = [x + y for x, y in zip(rewards, reward)]
-        for child in a_node.children:
-            if child.game == game_state:
-                node = child
-                break
-        else:
-            # Caso não exista ainda (raro se simulação foi feita corretamente), recria e adiciona
-            node = mcts.DecisionNode(game_state, max_reward, parent=a_node, action=a_action, player=0, value=reward)
-            a_node.add_child(node, reward)
-    rewards = [x+y for x, y in zip(rewards, game_state.reward_zone())]
+
+    rewards = [x + y for x, y in zip(rewards, game_state.reward_zone())]
+    return rewards, tree.root, actions, current_node
+
+def mcts_round(game_state, max_reward, iterations=4):
+    rewards = [0, 0]
+    actions = []
+    root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0)
+    tree = mcts.MCTS(root)
+    node = root
+    while not node.original_game.is_terminal():
+        node = tree.search(node, iterations=iterations)
+        if isinstance(node, mcts.ChanceNode):
+            actions += [node.a_action, node.j_action]
+            node, reward = node.expand()
+            rewards = [x + y for x, y in zip(rewards, reward)]
+        elif isinstance(node, mcts.DecisionNode) and node.action is None:
+            print(f"No action found for {"Japanese" if node.player == 0 else "Allied"}")
+            return rewards, tree.root, actions, node
+    rewards = [x + y for x, y in zip(rewards, node.original_game.reward_zone())]
+    if node.visits == 0:
+        tree.backpropagate(node, rewards)
+    print("Final rewards:", rewards)
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -163,45 +196,40 @@ def read_units(data):
     for unit in data:
         attack = {"Air": 0, "Sea": 0}
         is_elite = {"Air": None, "Sea": None}
-        
         for area in unit["attackDomains"]:
             attack[area["domain"]] = area["attack"]
-        
         transformed_unit = {
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
             "damage": 0,
-            "availability": 1, 
-            "type": unit["type"]
+            "type": unit["type"],
+            "attackValue":[attack["Air"], attack["Sea"]]
         }
-        
         result.append(transformed_unit)
-    
     return result
-
 
 def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
     pv = [0,0] #[random.randint(1, 3), random.randint(1, 3)]
-    action = choose_action(units, pv) 
+    action = "day" #choose_action(units, pv) 
     root_night = None
     if action != "day and night":
         print("Chosen action is:", action)
         game_state = game.Game(units=units, pv=pv, action=action)
         max_reward = game_state.max_reward(action)
-        result, root, actions, _ = mcts_round(copy.deepcopy(game_state), max_reward, True) 
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
     else:
         print("No consensus on action - day followed by night")
         game_state = game.Game(units=units, pv=pv, action="day")
         max_reward = game_state.max_reward("day")
-        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, True) 
-        game_state_night = game.Game(units=copy.deepcopy(node.game.units), pv=pv, action="night")
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
+        game_state_night = game.Game(units=node.game.units, pv=pv, action="night")
         if not game_state_night.is_terminal():
             result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward, True)
             actions.append(n_actions)
-            result = [x+y for x, y in zip(result, result_night)]       
+            result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
     print("Units at end: ", [u["damage"] for u in node.game.units[0]], [u["damage"] for u in node.game.units[1]])

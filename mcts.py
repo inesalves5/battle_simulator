@@ -4,8 +4,8 @@ import copy
 
 class ChanceNode: #node de chance
     def __init__(self, game, parent, j_action, a_action):
-        self.game = game
         self.original_game = copy.deepcopy(game)
+        self.game = game
         self.parent = parent
         self.children = []
         self.visits = 0
@@ -13,51 +13,42 @@ class ChanceNode: #node de chance
         self.j_action = j_action
         self.a_action = a_action
         self.max_reward = parent.max_reward
-        self.avg = [0, 0]
 
     def is_fully_expanded(self):
         return False
     
-    def best_child(self, exploration_weight=1.4): #esta a escolher a melhor para o player allied sempre
+    def best_child(self, exploration_weight=1.4):
         """Selects the best child based on UCT value."""
-        unexplored_actions = [child for child in self.children if child.visits == 0]
-    
-        if unexplored_actions:
-            return self.expand()
         return max(
             self.children,
-            key=lambda c: float('inf') if c.visits == 0 else 
+            key=lambda c: float("inf") if c.visits == 1 else 
             c.value[1] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
         )
 
     def expand(self):
         """Expands by adding a new child node."""
-        game_copy = copy.deepcopy(self.game)
-        game_copy, reward = game_copy.get_next_state([self.j_action, self.a_action])
-        if game_copy == self.game:
-            return self
-        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, value=reward)
+        game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
+        if game_copy == self.original_game:
+            return self.expand()
+        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action)
         for existing_child in self.children:
             if existing_child == child_node:
-                existing_child.update(reward)
-                return existing_child
+                return existing_child, reward
         self.children.append(child_node)
-        return child_node
+        return child_node, reward
 
     def update(self, result):
         """Updates node statistics after a simulation."""
-        self.update_value(result)
-        self.avg = [r + v for r, v in zip(result, self.avg)]
+        self.value = [v * self.visits / (self.visits + 1) + r / (self.visits + 1)
+                    for v, r in zip(self.value, result)]         
         self.visits += 1
 
-    def update_value(self, result):
-        self.value = [(r + self.visits * v) / (self.visits + 1) for v, r in zip(self.value, result)]
-    
     def add_child(self, child, reward):
         """Adds a child node."""
+        if child.game == self.original_game:
+            return
         for existing_child in self.children:
             if existing_child == child:
-                existing_child.update(reward)
                 return 
         self.children.append(child)
     
@@ -67,61 +58,51 @@ class ChanceNode: #node de chance
                 
 
 class DecisionNode: #node para as acoes 
-    def __init__(self, game, max_reward, parent=None, action=None, value=[0, 0], player=0): 
-        self.game = game
+    def __init__(self, game, max_reward, parent=None, action=None, player=0):         
         self.original_game = copy.deepcopy(game)
+        self.game = game
         self.max_reward = max_reward   
         self.parent = parent
         self.children = []
         self.visits = 0
-        self.value = value
+        self.value = [0, 0]
         self.action = action if player == 1 else " "
         self.untried_actions = list(game.actions_available(player))
         self.player = player
-        self.avg = [0, 0]
 
     def is_fully_expanded(self):
         return len(self.untried_actions) == 0
 
     def best_child(self, exploration_weight=1.4): #ver melhor constante que divide
-        """Selects the best child based on UCT value."""
-        unexplored_actions = [child for child in self.children if child.visits == 0]
-    
-        if unexplored_actions:
-            return self.expand()
+        """Selects the best child based on UCT value."""  
         return max(
             self.children,
-            key=lambda c: float('inf') if c.visits == 0 else 
-            c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
+            key=lambda c: float("inf") if c.visits == 1 else 
+            c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / c.visits)
         )
         
     def expand(self):
         """Expands by adding a new child node."""
-        if not self.untried_actions:
-            return self
-
         action = self.untried_actions.pop()
+        for child in self.children:
+            if isinstance(child, ChanceNode) and child.a_action == action:
+                return child, [0, 0]
         if self.player == 0:
             child_node = DecisionNode(copy.deepcopy(self.game), self.max_reward, parent=self, player=1-self.player, action=action)
         else:
             child_node = ChanceNode(copy.deepcopy(self.game), parent=self, j_action=self.action, a_action=action)
         self.children.append(child_node)
-        return child_node
+        return child_node, [0, 0]
     
     def update(self, result):
         """Updates node statistics after a simulation."""
-        self.update_value(result)
-        self.avg = [r + v for r, v in zip(result, self.avg)]
+        self.value = [(v * self.visits + r) / (self.visits + 1) for v, r in zip(self.value, result)]
         self.visits += 1
 
-    def update_value(self, result):
-        self.value = [(r + v * self.visits) / (self.visits + 1) for v, r in zip(self.value, result)]
-        
-    def add_child(self, child, reward):
+    def add_child(self, child):
         """Adds a child node."""
         for existing_child in self.children:
             if existing_child == child:
-                existing_child.update(reward)
                 return 
         self.children.append(child)
               
@@ -132,29 +113,35 @@ class DecisionNode: #node para as acoes
 class MCTS:
     def __init__(self, root):
         self.root = root
-        
-    def search(self, root, iterations=1000):
-        if root.game.is_terminal():
-            return root
+    
+    def search(self, node, iterations):
         for _ in range(iterations):
-            node = root
-
-            # Selection
-            while node.is_fully_expanded() and node.children:
-                node = node.best_child()
-
-            # Expansion
-            if not node.game.is_terminal(): #node
-                node = node.expand()
-
-            # Simulation
-            result = self.simulate(node.game) 
-
-            # Backpropagation
-            self.backpropagate(node, result)
-
-        return root.best_child(exploration_weight=0)  # Best child without exploration factor
-
+            self.sample()
+        return node.best_child()
+    
+    def sample(self):
+        node = self.root
+        rewards = [0, 0]
+        while not node.original_game.is_terminal():
+            if isinstance(node, ChanceNode):
+                node, reward = node.expand()
+                rewards = [x+y for x, y in zip(reward, rewards)]
+            elif node.visits == 0:
+                reward = self.simulate(node.game)
+                rewards = [x+y for x, y in zip(reward, rewards)]
+                break
+            else:
+                node, reward = self.select_action(node)
+                rewards = [x+y for x, y in zip(reward, rewards)]
+        rewards = [x+y for x, y in zip(rewards, node.original_game.reward_zone())] 
+        self.backpropagate(node, rewards)
+        return rewards    
+    
+    def select_action(self, node):
+        if node.is_fully_expanded():
+            return node.best_child(), [0, 0]
+        return node.expand()
+    
     def simulate(self, game):
         """Performs a random playout and returns result."""
         current_game = copy.deepcopy(game)

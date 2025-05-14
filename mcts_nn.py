@@ -25,7 +25,7 @@ class MCTS_Node():
     
     def get_uct(self):
         if self.visits == 0:
-            return float('inf')
+            return float("inf")
         return self.win_rate + np.sqrt(2) * np.sqrt(np.log(self.parent.visits) / (self.visits))
     
     def backpropagate(self, value):

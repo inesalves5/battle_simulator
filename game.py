@@ -13,32 +13,37 @@ class Game:
         self.pv = pv
 
     def step(self, actions):
-        game_copy = copy.deepcopy(self)
-        reward = [0, 0]
+        rewards = [0, 0]
         for player in range(2):
             action = actions[player]
-            units = game_copy.units[player]
-            opponent = game_copy.units[1-player]
+            units = self.units[player]
+            opponent = self.units[1-player]
             for i in range(len(action)):
                 if action[i] != None:
-                    initial_availability = opponent[action[i]]["availability"]
-                    state = game_copy.damage(units[i], opponent[action[i]])
-                    damage = game_copy.reward(self.action, player, opponent[action[i]])
-                    final_availability = opponent[action[i]]["availability"]
-                    if final_availability == 0:
-                        reward = [x + y for x, y in zip(reward, damage)]
+                    reward = [0, 0]
+                    target = opponent[action[i]]
+                    capacity = target["defense"] if target["type"] == "LBA" else target["defense"] + 1
+                    state = target["damage"]
+                    if state == float("inf") or capacity == 0:
+                        continue          
+                    prop = self.damage(units[i], target)
+                    prop = min(prop, capacity - state)
+                    damage = self.reward(self.action, player, target)
+                    if prop == capacity and state == 0:
+                        reward = damage                        
                     else:
-                        proportion = (initial_availability - final_availability) / initial_availability
+                        if target["damage"] == float("inf"):
+                            prop -= 1
+                            reward = [0.5*y for y in damage]
+                        proportion = 0.5 * prop / (capacity - 1)
                         reward = [x + proportion * y for x, y in zip(reward, damage)]
-        j_units = [unit for unit in game_copy.units[0] if unit["availability"] != 0]
-        a_units = [unit for unit in game_copy.units[1] if unit["availability"] != 0]
-        new = Game([j_units, a_units], self.pv, self.action)
-        return new, reward, new.is_terminal()
-    
+                    rewards = [x + y for x, y in zip(rewards, reward)]
+        return rewards, self.is_terminal()
+
     def is_terminal(self):
         aa0 = self.actions_available(0)
         aa1 = self.actions_available(1)
-        return len(self.units[0]) == 0 or len(self.units[1]) == 0 or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
+        return all([u["damage"] == float("inf") for u in self.units[0]]) or all([u["damage"] == float("inf") for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
         reward_j, reward_a = 0, 0
@@ -51,49 +56,44 @@ class Game:
         
     def reward(self, action, player, victim):
         if action == "day" and victim["type"] == "LBA":
-            damage = 5 * (victim["attack"][0] + 1)
+            damage = 5 * (victim["attackValue"][0] + 1)
         elif action == "day":
-            damage = 3 * victim["attack"][0] + victim["defense"]
+            damage = 3 * victim["attackValue"][0] + victim["defense"]
         elif victim["type"] == "LBA":
             return [0, 0]
         else:
-            damage = 2 * victim["attack"][1] + victim["defense"]
+            damage = 2 * victim["attackValue"][1] + victim["defense"]
         return [damage, -damage] if player == 0 else [-damage, damage]
     
     def damage(self, attacker, victim):
         hits = 0
+        prop = 0
         state = victim["damage"]
-        rolls = 0
         index = 0 if self.action == "day" else 1
         bonus = 1 if attacker["isElite"][index] else 0
-        if (state == float("inf")):
+        if state == float("inf"):
             return 0
         for _ in range(attacker["attack"][index]):
             if random.randint(1, 6) + bonus >= 6:
                 hits += 1
         for _ in range(hits):
             roll = random.randint(1, 6) + bonus 
-            rolls += roll
-            state += roll      
+            prop += roll
+            state += roll  
             if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda
-                victim["availability"] -= round(state / victim["defense"], 2)
-                victim["availability"] = max(victim["availability"], 0)
-                state = float('inf')
+                state = float("inf")
                 break
         victim["damage"] = state
-        if state != float("inf"):
-            victim["availability"] -= round(state / victim["defense"], 2)
-            victim["availability"] = max(victim["availability"], 0)
         if hits:
             victim["isElite"] = [False, False] 
             if state == victim["defense"]:
                 victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
-        return rolls
+        return prop
     
     def reward_zone(self):
-        if len(self.units[0]) and len(self.units[1]) == 0:
+        if not all([u["damage"] == float("inf") for u in self.units[0]]) and all([u["damage"] == float("inf") for u in self.units[1]]) :
             return [self.pv[0], -self.pv[0]]
-        if len(self.units[1]) and len(self.units[0]) == 0:
+        if not all([u["damage"] == float("inf") for u in self.units[1]]) and all([u["damage"] == float("inf") for u in self.units[0]]) :
             return [-self.pv[1], self.pv[1]]
         if all([a is None for a in self.actions_available(0)]) and not all([a is None for a in self.actions_available(1)]):
             return [-self.pv[1], self.pv[1]]
@@ -103,13 +103,12 @@ class Game:
     
     def actions_available(self, player):
         total_units = len(self.units[player])
-
         if self.action == "day":
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "BB"]
-            active_targets = [i for i, _ in enumerate(self.units[1 - player])]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "BB" and p["damage"] != float("inf")]
+            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["damage"] != float("inf")]
         else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "LBA"]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != "LBA"]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "LBA" and p["damage"] != float("inf")]
+            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != "LBA" and p["damage"] != float("inf")]
 
         if not active_units or not active_targets:
             return []
@@ -126,8 +125,36 @@ class Game:
         return valid_actions
      
     def get_next_state(self, actions):
-        new_game, reward, _ = self.step(actions)
+        new_game = copy.deepcopy(self)
+        reward, _ = new_game.step(actions)
         return new_game, reward
     
     def __eq__(self, other):
-        return isinstance(other, Game) and self.units == other.units and self.pv == other.pv and self.action == other.action 
+        if not isinstance(other, Game):
+            return False
+        if self.action != other.action or self.pv != other.pv:
+            return False
+        return self._compare_units(self.units, other.units)
+
+    def _compare_units(self, units1, units2):
+        if len(units1) != len(units2):
+            return False
+        for team1, team2 in zip(units1, units2):
+            if len(team1) != len(team2):
+                return False
+            for u1, u2 in zip(team1, team2):
+                for key in u1:
+                    if isinstance(u1[key], float) or isinstance(u2[key], float):
+                        if abs(u1[key] - u2[key]) > 1e-6:
+                            return False
+                    elif u1[key] != u2[key]:
+                        return False
+        return True
+    
+    def __str__(self):
+        final = ""
+        for player in range(2):
+            for unit in self.units[player]:
+                final += f"{unit['type'], unit['attack'], unit['defense'], unit['damage']}"
+        final += f"A: {self.action}, Pv: {self.pv}"
+        return final

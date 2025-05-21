@@ -136,8 +136,7 @@ class Game:
             return False
         return self._eq_unit_lists(self.units[0], other.units[0]) and self._eq_unit_lists(self.units[1], other.units[1])
     
-    def _eq_unit_lists(self, list1, list2):
-
+    def _eq_unit_lists(self, list1, list2):            
         if len(list1) != len(list2):
             return False
         matched = [False] * len(list2)

@@ -114,8 +114,8 @@ class DecisionNode: #node para as acoes
         self.children.append(child)
               
     def __eq__(self, other):
-        return isinstance(other, DecisionNode) and self.original_game == other.original_game #and self.action == other.action and \
-                #self.parent == other.parent and self.player == other.player and self.reward == other.reward
+        return isinstance(other, DecisionNode) and self.original_game == other.original_game and self.action == other.action and \
+                self.parent == other.parent and self.player == other.player and self.reward == other.reward
 
     def __str__(self):
         final = ""

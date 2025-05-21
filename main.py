@@ -140,7 +140,7 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=1000):
+def mcts_round(game_state, max_reward, iterations=10000):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -198,7 +198,7 @@ def main():
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
-    #visualize_mcts(root)
+    visualize_mcts(root)
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions

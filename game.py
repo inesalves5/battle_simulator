@@ -127,34 +127,51 @@ class Game:
     def get_next_state(self, actions):
         new_game = copy.deepcopy(self)
         reward, _ = new_game.step(actions)
+        while new_game == self:
+            reward, _ = new_game.step(actions)
         return new_game, reward
     
     def __eq__(self, other):
-        if not isinstance(other, Game):
+        if not isinstance(other, Game) or self.action != other.action or self.pv != other.pv:
             return False
-        if self.action != other.action or self.pv != other.pv:
-            return False
-        return self._compare_units(self.units, other.units)
+        return self._eq_unit_lists(self.units[0], other.units[0]) and self._eq_unit_lists(self.units[1], other.units[1])
+    
+    def _eq_unit_lists(self, list1, list2):
 
-    def _compare_units(self, units1, units2):
-        if len(units1) != len(units2):
+        if len(list1) != len(list2):
             return False
-        for team1, team2 in zip(units1, units2):
-            if len(team1) != len(team2):
+        matched = [False] * len(list2)
+        for u1 in list1:
+            found_match = False
+            for i, u2 in enumerate(list2):
+                if not matched[i] and self._eq_units(u1, u2):
+                    matched[i] = True
+                    found_match = True
+                    break
+            if not found_match:
                 return False
-            for u1, u2 in zip(team1, team2):
-                for key in u1:
-                    if isinstance(u1[key], float) or isinstance(u2[key], float):
-                        if abs(u1[key] - u2[key]) > 1e-6:
-                            return False
-                    elif u1[key] != u2[key]:
-                        return False
         return True
+
+    
+    def _eq_units(self, u1, u2):
+        #return u1["damage"] == u2["damage"]
+        return all(u1["attack"][i] == u2["attack"][i] for i in range(len(u1["attack"]))) and \
+                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(len(u1["isElite"]))) and  \
+                    u1["defense"] == u2["defense"] and \
+                    u1["damage"] == u2["damage"] and \
+                    u1["type"] == u2["type"] and \
+                    all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
     
     def __str__(self):
+        #return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
+        #    f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
+        return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
+        """
         final = ""
         for player in range(2):
             for unit in self.units[player]:
                 final += f"{unit['type'], unit['attack'], unit['defense'], unit['damage']}"
         final += f"A: {self.action}, Pv: {self.pv}"
         return final
+        """
+    

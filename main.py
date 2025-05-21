@@ -140,24 +140,20 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=2):
+def mcts_round(game_state, max_reward, iterations=1000):
     rewards = [0, 0]
     actions = []
-    root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0)
+    root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
-    node = root
-    while not node.original_game.is_terminal():
-        node = tree.search(node, iterations=iterations)
-        if isinstance(node, mcts.ChanceNode):
-            actions += [node.a_action, node.j_action]
-            node, reward = node.expand()
-            rewards = [x + y for x, y in zip(rewards, reward)]
-        elif isinstance(node, mcts.DecisionNode) and node.action is None:
-            print(f"No action found for {"Japanese" if node.player == 0 else "Allied"}")
-            return rewards, tree.root, actions, node
-    rewards = [x + y for x, y in zip(rewards, node.original_game.reward_zone())]
-    tree.backpropagate(node, rewards)
-    print("Final rewards:", rewards)
+    node = tree.search(root, iterations=iterations)
+    for child in root.children:
+        for cn in child.children:
+            print(cn.j_action, cn.a_action, "have", len(cn.children), "children")
+            """
+            for k in cn.children:
+                print(k.original_game)
+            print("----")
+            """
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -167,6 +163,7 @@ def read_units(data):
         is_elite = {"Air": None, "Sea": None}
         for area in unit["attackDomains"]:
             attack[area["domain"]] = area["attack"]
+            is_elite[area["domain"]] = area["isElite"]
         transformed_unit = {
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
@@ -182,7 +179,7 @@ def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
     pv = [0,0] #[random.randint(1, 3), random.randint(1, 3)]
-    action = choose_action(units, pv) 
+    action = "day" #choose_action(units, pv) 
     root_night = None
     if action != "day and night":
         print("Chosen action is:", action)
@@ -201,8 +198,7 @@ def main():
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
-    print("Units at end: ", [u["damage"] for u in node.game.units[0]], [u["damage"] for u in node.game.units[1]])
-    visualize_mcts(root)
+    #visualize_mcts(root)
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions

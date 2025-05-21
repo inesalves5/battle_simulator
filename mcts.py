@@ -28,9 +28,7 @@ class ChanceNode: #node de chance
 
     def expand(self):
         """Expands by adding a new child node."""
-        game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
-        if game_copy == self.original_game:
-            return self.expand()
+        game_copy, reward = self.original_game.get_next_state([self.j_action, self.a_action])
         child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)])
         for existing_child in self.children:
             if existing_child == child_node:
@@ -54,8 +52,8 @@ class ChanceNode: #node de chance
         self.children.append(child)
     
     def __eq__(self, other):
-        return isinstance(other, ChanceNode) and self.game == other.game and self.a_action == other.a_action and\
-                self.j_action == other.j_action and self.parent == other.parent 
+        return isinstance(other, ChanceNode) and self.game == other.game #and self.a_action == other.a_action and\
+                #self.j_action == other.j_action and self.parent == other.parent 
                 
     def __str__(self):
         final = ""
@@ -66,13 +64,13 @@ class ChanceNode: #node de chance
         return final
 
 class DecisionNode: #node para as acoes 
-    def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0]):         
+    def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0], root=False):         
         self.original_game = copy.deepcopy(game)
         self.game = game
         self.max_reward = max_reward   
         self.parent = parent
         self.children = []
-        self.visits = 0
+        self.visits = 1 if root else 0
         self.value = [0, 0]
         self.action = action if player == 1 else " "
         self.untried_actions = list(game.actions_available(player))
@@ -116,9 +114,9 @@ class DecisionNode: #node para as acoes
         self.children.append(child)
               
     def __eq__(self, other):
-        return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
-                self.parent == other.parent and self.player == other.player and self.untried_actions == other.untried_actions
-    
+        return isinstance(other, DecisionNode) and self.original_game == other.original_game #and self.action == other.action and \
+                #self.parent == other.parent and self.player == other.player and self.reward == other.reward
+
     def __str__(self):
         final = ""
         for player in range(2):
@@ -128,8 +126,9 @@ class DecisionNode: #node para as acoes
         return final
     
 class MCTS:
-    def __init__(self, root):
+    def __init__(self, root, nn=None):
         self.root = root
+        self.nn = nn
     
     def search(self, node, iterations):
         for _ in range(iterations):
@@ -143,7 +142,7 @@ class MCTS:
                 node, reward = node.expand()
                 rewards = [x+y for x, y in zip(reward, rewards)]
             elif node.visits == 0:
-                reward = self.simulate(node.game)
+                reward = self.simulate(node)
                 rewards = [x+y for x, y in zip(reward, rewards)]
                 break
             else:
@@ -158,10 +157,18 @@ class MCTS:
             return node.best_child(), [0, 0]
         return node.expand()
     
-    def simulate(self, game):
+    def simulate(self, node):
         """Performs a random playout and returns result."""
+        game = node.original_game
         current_game = copy.deepcopy(game)
+        if self.nn is not None:
+            return self.nn.predict(current_game)
         rewards = [0, 0]
+        if node.player == 1:
+            j_action = node.action
+            a_action = random.choice(list(current_game.actions_available(1)))
+            current_game, reward = current_game.get_next_state([j_action, a_action])
+            rewards = [x+y for x,y in zip(rewards, reward)]
         while not current_game.is_terminal():
             j_action = random.choice(list(current_game.actions_available(0)))
             a_action = random.choice(list(current_game.actions_available(1)))

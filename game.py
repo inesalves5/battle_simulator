@@ -14,6 +14,7 @@ class Game:
 
     def step(self, actions):
         rewards = [0, 0]
+        change, attacked = [], []
         for player in range(2):
             action = actions[player]
             units = self.units[player]
@@ -29,6 +30,10 @@ class Game:
                     prop = self.damage(units[i], target)
                     prop = min(prop, capacity - state)
                     damage = self.reward(self.action, player, target)
+                    if prop != 0:
+                        attacked.append(target)
+                    if target["damage"] == target["defense"]:
+                        change.append(target)
                     if prop == capacity and state == 0:
                         reward = damage                        
                     else:
@@ -38,6 +43,10 @@ class Game:
                         proportion = 0.5 * prop / (capacity - 1)
                         reward = [x + proportion * y for x, y in zip(reward, damage)]
                     rewards = [x + y for x, y in zip(rewards, reward)]
+        for target in change:
+            target["attack"] = [0, 1] if target["attack"][1] != 0 else [0, 0]
+        for target in attacked:
+            target["isElite"] = [False, False]
         return rewards, self.is_terminal()
 
     def is_terminal(self):
@@ -66,29 +75,22 @@ class Game:
         return [damage, -damage] if player == 0 else [-damage, damage]
     
     def damage(self, attacker, victim):
-        hits = 0
-        prop = 0
+        damage_value = 0
         state = victim["damage"]
         index = 0 if self.action == "day" else 1
         bonus = 1 if attacker["isElite"][index] else 0
         if state == float("inf"):
             return 0
+        roll = 0
         for _ in range(attacker["attack"][index]):
-            if random.randint(1, 6) + bonus >= 6:
-                hits += 1
-        for _ in range(hits):
-            roll = random.randint(1, 6) + bonus 
-            prop += roll
-            state += roll  
+            roll += random.randint(1, 6) + bonus 
+        if roll >= 6:
+            damage_value = random.randint(1, 6) + bonus 
+            state += damage_value  
             if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda
                 state = float("inf")
-                break
         victim["damage"] = state
-        if hits:
-            victim["isElite"] = [False, False] 
-            if state == victim["defense"]:
-                victim["attack"] = [0, 1] if victim["attack"][1] else [0, 0]
-        return prop
+        return damage_value
     
     def reward_zone(self):
         if not all([u["damage"] == float("inf") for u in self.units[0]]) and all([u["damage"] == float("inf") for u in self.units[1]]) :
@@ -121,14 +123,17 @@ class Game:
                 for unit_idx, target in zip(active_units, perm):
                     action[unit_idx] = target
                 valid_actions.append(action)
-
         return valid_actions
      
     def get_next_state(self, actions):
-        new_game = copy.deepcopy(self)
+        new_game = Game(copy.deepcopy(self.units), self.pv, self.action)
         reward, _ = new_game.step(actions)
-        while new_game == self:
+        i = 3
+        while new_game == self and i > 0:
+            i -= 1
             reward, _ = new_game.step(actions)
+        if new_game == self:
+            return None, [0, 0]
         return new_game, reward
     
     def __eq__(self, other):
@@ -153,18 +158,17 @@ class Game:
 
     
     def _eq_units(self, u1, u2):
-        #return u1["damage"] == u2["damage"]
-        return all(u1["attack"][i] == u2["attack"][i] for i in range(len(u1["attack"]))) and \
-                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(len(u1["isElite"]))) and  \
+        return all(u1["attack"][i] == u2["attack"][i] for i in range(2)) and \
+                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(2)) and  \
                     u1["defense"] == u2["defense"] and \
                     u1["damage"] == u2["damage"] and \
                     u1["type"] == u2["type"] and \
-                    all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
+                    all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(2))
     
     def __str__(self):
-        #return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
-        #    f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
-        return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
+        return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
+            f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
+        #return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
         """
         final = ""
         for player in range(2):

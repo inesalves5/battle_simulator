@@ -41,8 +41,8 @@ def visualize_mcts(root):
     def add_edges(node, parent_id=None):
         node_id = id(node)
         if isinstance(node, mcts.DecisionNode) and node.player == 0:
-            node_label = f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[0]]}" \
-                        f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.original_game.units[1]]}\n" \
+            node_label = f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.game.units[0]]}" \
+                        f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.game.units[1]]}\n" \
                         f"{node.visits}\n{round(node.value[1], 2)}"
         elif isinstance(node, mcts.ChanceNode):
             node_label = f"{node.visits}\n{round(node.value[1], 2)}"
@@ -51,7 +51,7 @@ def visualize_mcts(root):
         
         G.add_node(node_id, label=node_label, node_obj=node)  # Store node_obj for reference
 
-        if node.original_game.is_terminal():
+        if node.game.is_terminal():
             node_shapes[node_id] = "square"
         elif isinstance(node, mcts.ChanceNode):
             node_shapes[node_id] = "star"
@@ -92,7 +92,7 @@ def visualize_mcts(root):
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
-    plt.title(f"MCTS Tree Visualization for {root.original_game.action} action", fontsize=16)
+    plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
     plt.show()
     
@@ -140,7 +140,7 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=10000):
+def mcts_round(game_state, max_reward, iterations=1000000):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -151,7 +151,7 @@ def mcts_round(game_state, max_reward, iterations=10000):
             print(cn.j_action, cn.a_action, "have", len(cn.children), "children")
             """
             for k in cn.children:
-                print(k.original_game)
+                print(k.game)
             print("----")
             """
     return rewards, tree.root, actions, node
@@ -198,7 +198,7 @@ def main():
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
-    visualize_mcts(root)
+    #visualize_mcts(root)
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions

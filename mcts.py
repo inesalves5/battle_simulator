@@ -4,7 +4,6 @@ import copy
 
 class ChanceNode: #node de chance
     def __init__(self, game, parent, j_action, a_action, reward=[0, 0]):
-        self.original_game = copy.deepcopy(game)
         self.game = game
         self.parent = parent
         self.children = []
@@ -22,13 +21,15 @@ class ChanceNode: #node de chance
         """Selects the best child based on UCT value."""
         return max(
             self.children,
-            key=lambda c: float("inf") if c.visits == 1 else 
+            key=lambda c: float("inf") if c.visits == 0 else 
             c.value[1] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
         )
 
     def expand(self):
         """Expands by adding a new child node."""
-        game_copy, reward = self.original_game.get_next_state([self.j_action, self.a_action])
+        game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
+        if game_copy is None:
+            return None, [0, 0]
         child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)])
         for existing_child in self.children:
             if existing_child == child_node:
@@ -44,7 +45,7 @@ class ChanceNode: #node de chance
 
     def add_child(self, child, reward):
         """Adds a child node."""
-        if child.game == self.original_game:
+        if child.game == self.game:
             return
         for existing_child in self.children:
             if existing_child == child:
@@ -52,8 +53,8 @@ class ChanceNode: #node de chance
         self.children.append(child)
     
     def __eq__(self, other):
-        return isinstance(other, ChanceNode) and self.game == other.game #and self.a_action == other.a_action and\
-                #self.j_action == other.j_action and self.parent == other.parent 
+        return isinstance(other, ChanceNode) and self.game == other.game and self.a_action == other.a_action and\
+                self.j_action == other.j_action and self.parent == other.parent 
                 
     def __str__(self):
         final = ""
@@ -65,7 +66,6 @@ class ChanceNode: #node de chance
 
 class DecisionNode: #node para as acoes 
     def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0], root=False):         
-        self.original_game = copy.deepcopy(game)
         self.game = game
         self.max_reward = max_reward   
         self.parent = parent
@@ -84,7 +84,7 @@ class DecisionNode: #node para as acoes
         """Selects the best child based on UCT value."""  
         return max(
             self.children,
-            key=lambda c: float("inf") if c.visits == 1 else 
+            key=lambda c: float("inf") if c.visits == 0 else 
             c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / c.visits)
         )
         
@@ -114,7 +114,7 @@ class DecisionNode: #node para as acoes
         self.children.append(child)
               
     def __eq__(self, other):
-        return isinstance(other, DecisionNode) and self.original_game == other.original_game and self.action == other.action and \
+        return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
                 self.parent == other.parent and self.player == other.player and self.reward == other.reward
 
     def __str__(self):
@@ -137,18 +137,20 @@ class MCTS:
     
     def sample(self, node):
         rewards = node.reward
-        while not node.original_game.is_terminal():
+        while not node.game.is_terminal():
             if isinstance(node, ChanceNode):
                 node, reward = node.expand()
                 rewards = [x+y for x, y in zip(reward, rewards)]
+                if node is None:
+                    return [0, 0]    
             elif node.visits == 0:
                 reward = self.simulate(node)
                 rewards = [x+y for x, y in zip(reward, rewards)]
                 break
             else:
                 node, _ = self.select_action(node)
-        if node.original_game.is_terminal():
-            rewards = [x+y for x, y in zip(rewards, node.original_game.reward_zone())] 
+        if node is not None and node.game.is_terminal():
+            rewards = [x+y for x, y in zip(rewards, node.game.reward_zone())] 
         self.backpropagate(node, rewards)
         return rewards    
     
@@ -159,7 +161,7 @@ class MCTS:
     
     def simulate(self, node):
         """Performs a random playout and returns result."""
-        game = node.original_game
+        game = node.game
         current_game = copy.deepcopy(game)
         if self.nn is not None:
             return self.nn.predict(current_game)
@@ -169,10 +171,14 @@ class MCTS:
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
+            if current_game is None:
+                return rewards
         while not current_game.is_terminal():
             j_action = random.choice(list(current_game.actions_available(0)))
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
+            if current_game is None:
+                return rewards
             rewards = [x+y for x,y in zip(rewards, reward)]
         rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())] 
         return rewards

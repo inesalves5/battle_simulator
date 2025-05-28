@@ -6,6 +6,7 @@ import copy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
@@ -140,7 +141,7 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=1000000):
+def mcts_round(game_state, max_reward, iterations=100000):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -148,12 +149,10 @@ def mcts_round(game_state, max_reward, iterations=1000000):
     node = tree.search(root, iterations=iterations)
     for child in root.children:
         for cn in child.children:
-            print(cn.j_action, cn.a_action, "have", len(cn.children), "children")
-            """
-            for k in cn.children:
-                print(k.game)
-            print("----")
-            """
+            print(cn.j_action, cn.a_action, "has", len(cn.children), "children and", cn.visits, "visits")
+            #if cn.j_action == cn.a_action == [1, None]:
+                #for k in cn.children:
+                #    print(k.game)
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -198,7 +197,7 @@ def main():
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
-    #visualize_mcts(root)
+    visualize_mcts(root)
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions
@@ -212,4 +211,7 @@ def testing():
     return 
 
 if __name__ == "__main__":
+    start = time.time()
     print(main())
+    end = time.time()
+    print("Execution time:", end - start, "seconds")

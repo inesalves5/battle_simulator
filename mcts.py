@@ -1,10 +1,11 @@
 import math
 import random
 import copy
+import game   
 
 class ChanceNode: #node de chance
-    def __init__(self, game, parent, j_action, a_action, reward=[0, 0]):
-        self.game = game
+    def __init__(self, game_state, parent, j_action, a_action, reward=[0, 0]):
+        self.game = game_state
         self.parent = parent
         self.children = []
         self.visits = 0
@@ -80,7 +81,7 @@ class DecisionNode: #node para as acoes
     def is_fully_expanded(self):
         return len(self.untried_actions) == 0
 
-    def best_child(self, exploration_weight=1.4): #ver melhor constante que divide
+    def best_child(self, exploration_weight=2.5):
         """Selects the best child based on UCT value."""  
         return max(
             self.children,
@@ -145,6 +146,8 @@ class MCTS:
                     return [0, 0]    
             elif node.visits == 0:
                 reward = self.simulate(node)
+                if reward is None:
+                    return [0, 0]
                 rewards = [x+y for x, y in zip(reward, rewards)]
                 break
             else:
@@ -172,13 +175,13 @@ class MCTS:
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
             if current_game is None:
-                return rewards
+                return None
         while not current_game.is_terminal():
             j_action = random.choice(list(current_game.actions_available(0)))
             a_action = random.choice(list(current_game.actions_available(1)))
             current_game, reward = current_game.get_next_state([j_action, a_action])
             if current_game is None:
-                return rewards
+                return None
             rewards = [x+y for x,y in zip(rewards, reward)]
         rewards = [x+y for x,y in zip(rewards, current_game.reward_zone())] 
         return rewards

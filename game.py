@@ -14,7 +14,7 @@ class Game:
 
     def step(self, actions):
         rewards = [0, 0]
-        change, attacked = [], []
+        change_gunnery, change_airstrike, change_isElite = [], [], []
         for player in range(2):
             action = actions[player]
             units = self.units[player]
@@ -30,10 +30,12 @@ class Game:
                     prop = self.damage(units[i], target)
                     prop = min(prop, capacity - state)
                     damage = self.reward(self.action, player, target)
-                    if prop != 0:
-                        attacked.append(target)
-                    if target["damage"] == target["defense"]:
-                        change.append(target)
+                    if prop != 0 and target["type"] == "BB":
+                        change_isElite.append(target)
+                    if target["damage"] == target["defense"] and target["type"] == "BB":
+                        change_gunnery.append(target)
+                    elif target["type"] == "CV" and target["damage"] == target["defense"]:
+                        change_airstrike.append(target)
                     if prop == capacity and state == 0:
                         reward = damage                        
                     else:
@@ -43,10 +45,12 @@ class Game:
                         proportion = 0.5 * prop / (capacity - 1)
                         reward = [x + proportion * y for x, y in zip(reward, damage)]
                     rewards = [x + y for x, y in zip(rewards, reward)]
-        for target in change:
-            target["attack"] = [0, 1] if target["attack"][1] != 0 else [0, 0]
-        for target in attacked:
-            target["isElite"] = [False, False]
+        for target in change_gunnery:
+            target["attack"][1] = 1 if target["attack"][1] != 0 else 0
+        for unit in change_isElite:
+            unit["isElite"] = [False, False]
+        for target in change_airstrike:
+            target["attack"][0] = 0
         return rewards, self.is_terminal()
 
     def is_terminal(self):
@@ -78,7 +82,7 @@ class Game:
         damage_value = 0
         state = victim["damage"]
         index = 0 if self.action == "day" else 1
-        bonus = 1 if attacker["isElite"][index] else 0
+        bonus = 1 if attacker["isElite"][index] and victim["type"] != "LBA" else 0
         if state == float("inf"):
             return 0
         roll = 0
@@ -155,20 +159,19 @@ class Game:
             if not found_match:
                 return False
         return True
-
     
     def _eq_units(self, u1, u2):
-        return all(u1["attack"][i] == u2["attack"][i] for i in range(2)) and \
-                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(2)) and  \
+        return all(u1["attack"][i] == u2["attack"][i] for i in range(len(u1["attack"]))) and \
+                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(len(u1["isElite"]))) and  \
                     u1["defense"] == u2["defense"] and \
                     u1["damage"] == u2["damage"] and \
                     u1["type"] == u2["type"] and \
-                    all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(2))
+                    all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
     
     def __str__(self):
-        return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
-            f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
-        #return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
+        #return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
+        #    f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
+        return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
         """
         final = ""
         for player in range(2):

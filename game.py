@@ -3,6 +3,8 @@ from collections import Counter
 import random
 import copy
 from collections import defaultdict
+import torch
+import torch.nn as nn
 
 class Game:
     
@@ -181,3 +183,12 @@ class Game:
         return final
         """
     
+    def encode(self):
+        features = []
+        for player_units in self.units:
+            for unit in player_units:
+                t = unit["damage"] / unit["defense"] if unit["type"] == "LBA" else unit["damage"] / (unit["defense"] + 1)
+                if unit["damage"] == float("inf"):
+                    t = 1.0
+                features.append(t)    
+        return torch.tensor(features, dtype=torch.float32)

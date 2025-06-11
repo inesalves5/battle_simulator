@@ -81,7 +81,7 @@ class DecisionNode: #node para as acoes
     def is_fully_expanded(self):
         return len(self.untried_actions) == 0
 
-    def best_child(self, exploration_weight=2.5):
+    def best_child(self, exploration_weight=2):
         """Selects the best child based on UCT value."""  
         return max(
             self.children,
@@ -167,7 +167,7 @@ class MCTS:
         game = node.game
         current_game = copy.deepcopy(game)
         if self.nn is not None:
-            return self.nn.predict(current_game)
+            return self.nn.forward(current_game)
         rewards = [0, 0]
         if node.player == 1:
             j_action = node.action

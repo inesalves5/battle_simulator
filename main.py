@@ -1,12 +1,14 @@
 import mcts
 import json
 import game
+import NN
 import random
 import copy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import ds
 
 def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
@@ -102,13 +104,19 @@ def choose_random():
         units = json.load(file)
 
     nr_japanese = random.randint(1, 2)
-    #japanese = random.sample(units["japanese"], nr_japanese)
+    japanese = random.sample(units["japanese"], nr_japanese)
     
     nr_allied = random.randint(1, 2)
-    #allied = random.sample(units["allied"], nr_allied)
-    japanese = [units["japanese"][0], units["japanese"][2]]
-    allied = [units["allied"][3], units["allied"][0]]
-    return japanese, copy.deepcopy(japanese)
+    allied = random.sample(units["allied"], nr_allied)
+    A = units["japanese"][0]
+    B = units["japanese"][2]
+    C = units["japanese"][4]
+    D = units["allied"][0]
+    E = units["allied"][3]
+    F = units["allied"][4]
+    japanese = [E]
+    allied = [A, B]
+    return japanese, allied
     
 
 def represent(game, action, player):
@@ -122,13 +130,13 @@ def represent(game, action, player):
     print("---- end ----")
 
 
-def choose_action(units, pv):
+def choose_action(units, pv, nn=None):
     game_day = game.Game(units=copy.deepcopy(units), pv=pv, action="day")
     max_reward_day = game_day.max_reward("day")
     game_night = game.Game(units=copy.deepcopy(units), pv=pv, action="night")
     max_reward_night = game_night.max_reward("night")
-    res_day, root_day, _, _ = mcts_round(game_day, max_reward_day)
-    res_night, root_night, _, _ = mcts_round(game_night, max_reward_night)
+    res_day, root_day, _, _ = mcts_round(game_day, max_reward_day, nn=nn)
+    res_night, root_night, _, _ = mcts_round(game_night, max_reward_night, nn=nn)
     print("Day result:", res_day)
     print("Night result:", res_night)
     action_j = "day" if res_day[0] > res_night[0] else "night"
@@ -141,18 +149,18 @@ def choose_action(units, pv):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=100000):
+def mcts_round(game_state, max_reward, iterations=1000, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
     node = tree.search(root, iterations=iterations)
-    for child in root.children:
-        for cn in child.children:
-            print(cn.j_action, cn.a_action, "has", len(cn.children), "children and", cn.visits, "visits")
-            #if cn.j_action == cn.a_action == [1, None]:
-                #for k in cn.children:
-                #    print(k.game)
+    print("Root has", root.visits, "visits and value", root.value)
+    while not node.game.is_terminal():
+        if isinstance(node, mcts.ChanceNode):
+            print("actions", node.j_node, node.a_action)
+            node = node.best_child()
+    print(node.game)
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -177,22 +185,23 @@ def read_units(data):
 def main():
     japanese, allied = choose_random()
     units = [read_units(japanese), read_units(allied)]
-    pv = [0,0] #[random.randint(1, 3), random.randint(1, 3)]
-    action = "day" #choose_action(units, pv) 
+    nn = NN.Transformer(len(units[0]) + len(units[1]))
+    pv = [0, 0] #[random.randint(1, 3), random.randint(1, 3)]
+    action = "day" #choose_action(units, pv, nn) 
     root_night = None
     if action != "day and night":
         print("Chosen action is:", action)
         game_state = game.Game(units=units, pv=pv, action=action)
         max_reward = game_state.max_reward(action)
-        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, nn=nn) 
     else:
         print("No consensus on action - day followed by night")
         game_state = game.Game(units=units, pv=pv, action="day")
         max_reward = game_state.max_reward("day")
-        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, nn=nn) 
         game_state_night = game.Game(units=node.game.units, pv=pv, action="night")
         if not game_state_night.is_terminal():
-            result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward, True)
+            result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward, nn=nn)
             actions.append(n_actions)
             result = [x+y for x, y in zip(result, result_night)]    
         else:
@@ -210,8 +219,26 @@ def testing():
     file.close()
     return 
 
+def try_nn():
+    data = ds.self_play_and_generate_training_data(100)
+    model = NN.ValueMLP()
+    ds.train_value_net(model, data)
+    for game_state, target_reward in random.sample(data, 5):
+        pred = model.predict(game_state)
+        print(f"Target: {target_reward:.2f}, Predicted: {pred:.2f}")
+
+def create_random_game():
+    japanese, allied = choose_random()
+    units = [read_units(japanese), read_units(allied)]
+    pv = [0, 0]  # Placeholder for player values
+    action = "day"  # Placeholder for action
+    game_state = game.Game(units=units, pv=pv, action=action)
+    return game_state
+
 if __name__ == "__main__":
-    start = time.time()
-    print(main())
-    end = time.time()
-    print("Execution time:", end - start, "seconds")
+    #start = time.time()
+    #val_pred = try_nn()
+    #end = time.time()
+    #print("Execution time:", end - start, "seconds")
+    #print(val_pred)
+    main()

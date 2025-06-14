@@ -37,7 +37,7 @@ class Transformer(nn.Module):
             return value.item()
 
 class ValueMLP(nn.Module):
-    def __init__(self, input_dim=3):
+    def __init__(self, input_dim=TOTAL_UNITS):
         super().__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 64),

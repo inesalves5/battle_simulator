@@ -42,44 +42,37 @@ def train_value_net(model, data, epochs=10, batch_size=10000, lr=1e-2, device='c
         avg_loss = total_loss / len(dataset)
         print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
 
-def simulate_mode_reward(game_state, num_simulations):
-    rewards = []
+def simulate(game_state):
+    r = [0, 0]
     games = [] 
     """
     objeivo do games é adicionar a data os varios estados do jogo que tiveram o resultado final r dentro do for,
     para serem considerados quando a nn receber um estado intermedio do jogo
     """
-    for _ in range(num_simulations):
-        g = copy.deepcopy(game_state)
-        r = [0, 0]
-        while not g.is_terminal():
-            a0 = random.choice(g.actions_available(0))
-            a1 = random.choice(g.actions_available(1))
-            g, reward = g.get_next_state([a0, a1])
-            if g is None:
-                break
-            r = [x+y for x, y in zip(r, reward)]
-            games.append(g)
-        if g is not None:
-            r = [x+y for x, y in zip(r, g.reward_zone())]
-            rewards.append(r[0])  # Only player 0's reward
-    return rewards
+    g = copy.deepcopy(game_state)
+    while not g.is_terminal():
+        games.append(g)
+        a0 = random.choice(g.actions_available(0))
+        a1 = random.choice(g.actions_available(1))
+        g, reward = g.get_next_state([a0, a1])
+        if g is None:
+            break
+        r = [x+y for x, y in zip(r, reward)]
+    if g is not None:
+        games.append(g)
+        r = [x+y for x, y in zip(r, g.reward_zone())]
+    return r[0], games
 
 
 def self_play_and_generate_training_data(n_games):
     data = []
-    avg = 0
-    options = 10
     values = []
     for _ in range(n_games):
         game_state = main.create_random_game()  # sua função que cria um estado inicial aleatório
-        reward = simulate_mode_reward(game_state, options)  # usamos a moda em vez da média
-        for res in reward:
-            avg += res
-            values.append(res)
-            data.append((game_state, res))  # apenas o reward do jogador 0
-    print("average reward:", avg / (n_games*options))
-    counter = Counter(values)
+        r, games = simulate(game_state)  # usamos a moda em vez da média
+        for game in games:
+            data.append((game, r))  # apenas o reward do jogador 0
+    counter = Counter(data[i][1] for i in range(len(data)))
     mode_value= counter.most_common(5)
     print("mode value:", mode_value)
     return data

@@ -167,7 +167,7 @@ class MCTS:
         game = node.game
         current_game = copy.deepcopy(game)
         if self.nn is not None:
-            return self.nn.forward(current_game)
+            return self.nn.predict(current_game.encode())
         rewards = [0, 0]
         if node.player == 1:
             j_action = node.action

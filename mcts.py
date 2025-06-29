@@ -19,15 +19,15 @@ class ChanceNode: #node de chance
         return False
     
     def best_child(self, exploration_weight=1.4):
-        """Selects the best child based on UCT value."""
+        '''Selects the best child based on UCT value.'''
         return max(
             self.children,
-            key=lambda c: float("inf") if c.visits == 0 else 
+            key=lambda c: float('inf') if c.visits == 0 else 
             c.value[1] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / (c.visits))
         )
 
     def expand(self):
-        """Expands by adding a new child node."""
+        '''Expands by adding a new child node.'''
         game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
         if game_copy is None:
             return None, [0, 0]
@@ -39,13 +39,13 @@ class ChanceNode: #node de chance
         return child_node, reward
 
     def update(self, result):
-        """Updates node statistics after a simulation."""
+        '''Updates node statistics after a simulation.'''
         self.value = [v * self.visits / (self.visits + 1) + r / (self.visits + 1)
                     for v, r in zip(self.value, result)]         
         self.visits += 1
 
     def add_child(self, child, reward):
-        """Adds a child node."""
+        '''Adds a child node.'''
         if child.game == self.game:
             return
         for existing_child in self.children:
@@ -58,11 +58,11 @@ class ChanceNode: #node de chance
                 self.j_action == other.j_action and self.parent == other.parent 
                 
     def __str__(self):
-        final = ""
+        final = ''
         for player in range(2):
             final += f"Player {player}:\n"
             for unit in self.game.units[player]:
-                final += f"  {unit['type']} (Damage: {unit['damage']})\n"
+                final += f' {unit["type"]} (Damage: {unit["damage"]})\n'
         return final
 
 class DecisionNode: #node para as acoes 
@@ -73,7 +73,7 @@ class DecisionNode: #node para as acoes
         self.children = []
         self.visits = 1 if root else 0
         self.value = [0, 0]
-        self.action = action if player == 1 else " "
+        self.action = action if player == 1 else ' '
         self.untried_actions = list(game.actions_available(player))
         self.player = player
         self.reward = reward
@@ -82,15 +82,15 @@ class DecisionNode: #node para as acoes
         return len(self.untried_actions) == 0
 
     def best_child(self, exploration_weight=2):
-        """Selects the best child based on UCT value."""  
+        '''Selects the best child based on UCT value.'''  
         return max(
             self.children,
-            key=lambda c: float("inf") if c.visits == 0 else 
+            key=lambda c: float('inf') if c.visits == 0 else 
             c.value[self.player] / (2 * self.max_reward) + exploration_weight * math.sqrt(math.log(self.visits) / c.visits)
         )
         
     def expand(self):
-        """Expands by adding a new child node."""
+        '''Expands by adding a new child node.'''
         action = self.untried_actions.pop()
         for child in self.children:
             if isinstance(child, ChanceNode) and child.a_action == action:
@@ -103,12 +103,12 @@ class DecisionNode: #node para as acoes
         return child_node, [0, 0]
     
     def update(self, result):
-        """Updates node statistics after a simulation."""
+        '''Updates node statistics after a simulation.'''
         self.value = [(v * self.visits + r) / (self.visits + 1) for v, r in zip(self.value, result)]
         self.visits += 1
 
     def add_child(self, child):
-        """Adds a child node."""
+        '''Adds a child node.'''
         for existing_child in self.children:
             if existing_child == child:
                 return 
@@ -119,11 +119,11 @@ class DecisionNode: #node para as acoes
                 self.parent == other.parent and self.player == other.player and self.reward == other.reward
 
     def __str__(self):
-        final = ""
+        final = ''
         for player in range(2):
             final += f"Player {player}:\n"
             for unit in self.game.units[player]:
-                final += f"  {unit['type']} (Damage: {unit['damage']})\n"
+                final += f'  {unit["type"]} (Damage: {unit["damage"]})\n'
         return final
     
 class MCTS:
@@ -163,7 +163,7 @@ class MCTS:
         return node.expand()
     
     def simulate(self, node):
-        """Performs a random playout and returns result."""
+        '''Performs a random playout and returns result.'''
         game = node.game
         current_game = copy.deepcopy(game)
         if self.nn is not None:
@@ -187,7 +187,7 @@ class MCTS:
         return rewards
 
     def backpropagate(self, node, result):
-        """Backpropagates the simulation result up the tree."""
+        '''Backpropagates the simulation result up the tree.'''
         while node:
             node.update(result)
             node = node.parent

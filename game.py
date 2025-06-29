@@ -3,8 +3,7 @@ from collections import Counter
 import random
 import copy
 from collections import defaultdict
-import torch
-import torch.nn as nn
+import tensorflow as tf
 
 class Game:
     
@@ -25,40 +24,43 @@ class Game:
                 if action[i] != None:
                     reward = [0, 0]
                     target = opponent[action[i]]
-                    capacity = target["defense"] if target["type"] == "LBA" else target["defense"] + 1
-                    state = target["damage"]
-                    if state == float("inf") or capacity == 0:
+                    capacity = target["defense"] if target["type"] == 'LBA' else target["defense"] + 1
+                    state = target['damage']
+                    if state == float('inf') or capacity == 0:
                         continue          
                     prop = self.damage(units[i], target)
                     prop = min(prop, capacity - state)
                     damage = self.reward(self.action, player, target)
-                    if prop != 0 and target["type"] == "BB":
+                    if prop != 0 and target["type"] == 'BB':
                         change_isElite.append(target)
-                    if target["damage"] == target["defense"] and target["type"] == "BB":
+                    if target['damage'] == target["defense"] and target["type"] == 'BB':
                         change_gunnery.append(target)
-                    elif target["type"] == "CV" and target["damage"] == target["defense"]:
+                    elif target["type"] == 'CV' and target['damage'] == target["defense"]:
                         change_airstrike.append(target)
                     if prop == capacity and state == 0:
                         reward = damage                        
                     else:
-                        if target["damage"] == float("inf"):
+                        if target['damage'] == float('inf'):
                             prop -= 1
                             reward = [0.5*y for y in damage]
-                        proportion = 0.5 * prop / (capacity - 1)
+                        if capacity != 1:
+                            proportion = 0.5 * prop / (capacity - 1)
+                        else:
+                            proportion = 1
                         reward = [x + proportion * y for x, y in zip(reward, damage)]
                     rewards = [x + y for x, y in zip(rewards, reward)]
         for target in change_gunnery:
-            target["attack"][1] = 1 if target["attack"][1] != 0 else 0
+            target['attack'][1] = 1 if target['attack'][1] != 0 else 0
         for unit in change_isElite:
-            unit["isElite"] = [False, False]
+            unit['isElite'] = [False, False]
         for target in change_airstrike:
-            target["attack"][0] = 0
+            target['attack'][0] = 0
         return rewards, self.is_terminal()
 
     def is_terminal(self):
         aa0 = self.actions_available(0)
         aa1 = self.actions_available(1)
-        return all([u["damage"] == float("inf") for u in self.units[0]]) or all([u["damage"] == float("inf") for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
+        return all([u['damage'] == float('inf') for u in self.units[0]]) or all([u['damage'] == float('inf') for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
         
     def max_reward(self, action): #fazemos para 0 porque é igual
         reward_j, reward_a = 0, 0
@@ -70,11 +72,11 @@ class Game:
         return max(reward_j, reward_a)
         
     def reward(self, action, player, victim):
-        if action == "day" and victim["type"] == "LBA":
+        if action == 'day' and victim["type"] == 'LBA':
             damage = 5 * (victim["attackValue"][0] + 1)
-        elif action == "day":
+        elif action == 'day':
             damage = 3 * victim["attackValue"][0] + victim["defense"]
-        elif victim["type"] == "LBA":
+        elif victim["type"] == 'LBA':
             return [0, 0]
         else:
             damage = 2 * victim["attackValue"][1] + victim["defense"]
@@ -82,26 +84,26 @@ class Game:
     
     def damage(self, attacker, victim):
         damage_value = 0
-        state = victim["damage"]
-        index = 0 if self.action == "day" else 1
-        bonus = 1 if attacker["isElite"][index] and victim["type"] != "LBA" else 0
-        if state == float("inf"):
+        state = victim['damage']
+        index = 0 if self.action == 'day' else 1
+        bonus = 1 if attacker['isElite'][index] and victim["type"] != 'LBA' else 0
+        if state == float('inf'):
             return 0
         roll = 0
-        for _ in range(attacker["attack"][index]):
+        for _ in range(attacker['attack'][index]):
             roll += random.randint(1, 6) + bonus 
         if roll >= 6:
             damage_value = random.randint(1, 6) + bonus 
             state += damage_value  
-            if (victim["type"]=="LBA" and state >= victim["defense"]) or state > victim["defense"]: #afunda
-                state = float("inf")
-        victim["damage"] = state
+            if (victim["type"]=='LBA' and state >= victim["defense"]) or state > victim["defense"]: #afunda
+                state = float('inf')
+        victim['damage'] = state
         return damage_value
     
     def reward_zone(self):
-        if not all([u["damage"] == float("inf") for u in self.units[0]]) and all([u["damage"] == float("inf") for u in self.units[1]]) :
+        if not all([u['damage'] == float('inf') for u in self.units[0]]) and all([u['damage'] == float('inf') for u in self.units[1]]) :
             return [self.pv[0], -self.pv[0]]
-        if not all([u["damage"] == float("inf") for u in self.units[1]]) and all([u["damage"] == float("inf") for u in self.units[0]]) :
+        if not all([u['damage'] == float('inf') for u in self.units[1]]) and all([u['damage'] == float('inf') for u in self.units[0]]) :
             return [-self.pv[1], self.pv[1]]
         if all([a is None for a in self.actions_available(0)]) and not all([a is None for a in self.actions_available(1)]):
             return [-self.pv[1], self.pv[1]]
@@ -111,12 +113,12 @@ class Game:
     
     def actions_available(self, player):
         total_units = len(self.units[player])
-        if self.action == "day":
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "BB" and p["damage"] != float("inf")]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["damage"] != float("inf")]
+        if self.action == 'day':
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != 'BB' and p['damage'] != float('inf')]
+            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p['damage'] != float('inf')]
         else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != "LBA" and p["damage"] != float("inf")]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != "LBA" and p["damage"] != float("inf")]
+            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
 
         if not active_units or not active_targets:
             return []
@@ -163,32 +165,25 @@ class Game:
         return True
     
     def _eq_units(self, u1, u2):
-        return all(u1["attack"][i] == u2["attack"][i] for i in range(len(u1["attack"]))) and \
-                    all(u1["isElite"][i] == u2["isElite"][i] for i in range(len(u1["isElite"]))) and  \
+        return all(u1['attack'][i] == u2['attack'][i] for i in range(len(u1['attack']))) and \
+                    all(u1['isElite'][i] == u2['isElite'][i] for i in range(len(u1['isElite']))) and  \
                     u1["defense"] == u2["defense"] and \
-                    u1["damage"] == u2["damage"] and \
+                    u1['damage'] == u2['damage'] and \
                     u1["type"] == u2["type"] and \
                     all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
     
     def __str__(self):
-        #return f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[0]]}" +\
-        #    f"{[[u["attack"], u["isElite"], u["defense"], u["damage"], u["type"], u["attackValue"]]for u in self.units[1]]}"
-        return f"{[unit["damage"] for unit in self.units[0]], [unit["damage"] for unit in self.units[1]]}"
-        """
-        final = ""
-        for player in range(2):
-            for unit in self.units[player]:
-                final += f"{unit['type'], unit['attack'], unit['defense'], unit['damage']}"
-        final += f"A: {self.action}, Pv: {self.pv}"
-        return final
-        """
-    
+        return f"{[unit['damage'] for unit in self.units[0]], [unit['damage'] for unit in self.units[1]]}"
+
     def encode(self):
         features = []
         for player_units in self.units:
             for unit in player_units:
-                t = unit["damage"] / unit["defense"] if unit["type"] == "LBA" else unit["damage"] / (unit["defense"] + 1)
-                if unit["damage"] == float("inf"):
+                if unit['damage'] == float('inf'):
                     t = 1.0
-                features.append(t)    
-        return torch.tensor(features, dtype=torch.float32)
+                elif unit["type"] == 'LBA':
+                    t = unit['damage'] / unit["defense"]
+                else:
+                    t = unit['damage'] / (unit["defense"] + 1)
+                features.append(t)
+        return tf.convert_to_tensor(features, dtype=tf.float32)

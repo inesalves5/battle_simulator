@@ -36,6 +36,7 @@ def _hierarchy_pos(G, node, width=1., vert_gap=0.2, xcenter=0.5, pos=None, paren
 def visualize_mcts(root, nn=False):
     """Generates a tree visualization using NetworkX and Matplotlib without Graphviz."""
     G = nx.DiGraph()
+
     node_shapes = {}
 
     # Map from (parent, child) to label (from parent node)
@@ -44,8 +45,8 @@ def visualize_mcts(root, nn=False):
     def add_edges(node, parent_id=None):
         node_id = id(node)
         if isinstance(node, mcts.DecisionNode) and node.player == 0:
-            node_label = f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.game.units[0]]}" \
-                        f"{[u['damage'] if u['damage'] != float("inf") else '-' for u in node.game.units[1]]}\n" \
+            node_label = f"{[u['damage'] if u['damage'] != float('inf') else '-' for u in node.game.units[0]]}" \
+                        f"{[u['damage'] if u['damage'] != float('inf') else '-' for u in node.game.units[1]]}\n" \
                         f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
         elif isinstance(node, mcts.ChanceNode):
             node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
@@ -97,9 +98,11 @@ def visualize_mcts(root, nn=False):
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
     plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
-    plt.savefig(f"mcts_tree_{"NN" if nn else "Normal"}.png", format="png", bbox_inches="tight")
+    plt.show()
 
-def choose_random():
+    #plt.savefig(f"mcts_tree_{'NN' if nn else 'Normal'}.png", format="png", bbox_inches="tight")
+
+def choose_from_part():
     with open("units.json", "r") as file:
         units = json.load(file)
 
@@ -114,10 +117,41 @@ def choose_random():
     D = units["allied"][0]
     E = units["allied"][3]
     F = units["allied"][4]
-    japanese = [A, C]
-    allied = [E, F]
-    return japanese, allied
+    japanese = read_units([A, B])
+    allied = read_units([D, E])
+    print(len(japanese), len(allied))
+    num = len(japanese) + len(allied)
+    return num, japanese, allied
+
+def choose_from_all():
+    with open("units_total.json", "r") as file:
+        units = json.load(file)
     
+    units = units["units"]
+    number = random.randint(3, 40)
+    chosen = random.sample(units, number)
+    japanese, allied = [], []
+
+    for unit in chosen:
+        attack = {"Air": 0, "Sea": 0}
+        is_elite = {"Air": None, "Sea": None}
+        for area in unit["attackDomains"]:
+            attack[area["domain"]] = area["attack"]
+            is_elite[area["domain"]] = area["isElite"]
+        transformed_unit = {
+            "attack": [attack["Air"], attack["Sea"]],
+            "isElite": [is_elite["Air"], is_elite["Sea"]],
+            "defense": unit["stepsMax"], 
+            "damage": 0,
+            "type": unit["type"],
+            "attackValue":[attack["Air"], attack["Sea"]]
+        }
+        if unit["name"].startswith("IJN"):
+            japanese.append(transformed_unit)
+        else:
+            allied.append(transformed_unit)
+    print(len(japanese), len(allied))
+    return number, japanese, allied
 
 def represent(game, action, player):
     print("Action type: ", game.action)
@@ -149,20 +183,21 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=10000, nn=None):
+def mcts_round(game_state, max_reward, iterations=10, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
     node = tree.search(root, iterations=iterations)
-    node = root
     print("Root has", root.visits, "visits and value", root.value)
+    """
     while not node.game.is_terminal():
         if isinstance(node, mcts.ChanceNode):
             print("actions", node.j_action, node.a_action)
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
                    else c.value[1])
     print(node.game)
+    """
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -188,7 +223,7 @@ def mcts_vs_nn():
     data = ds.self_play_and_generate_training_data(1000)
     nn = NN.ValueMLP()
     ds.train_value_net(nn, data)
-    japanese, allied = choose_random()
+    japanese, allied = choose_from_part()
     units = [read_units(japanese), read_units(allied)]
     pv = [0, 0] #[random.randint(1, 3), random.randint(1, 3)]
     action = "day" #choose_action(units, pv, nn) 
@@ -205,30 +240,32 @@ def mcts_vs_nn():
     return result, result_nn 
     
 def main():    
-    japanese, allied = choose_random()
-    units = [read_units(japanese), read_units(allied)]
+    num, japanese, allied = choose_from_all()
+    units = [japanese, allied]
     pv = [0, 0] #[random.randint(1, 3), random.randint(1, 3)]
     action = "day" #choose_action(units, pv, nn) 
     root_night = None
-    nn = None 
+    nn = None #NN.ValueMLP(num)  # Uncomment to use neural network
     if action != "day and night":
         print("Chosen action is:", action)
         game_state = game.Game(units=units, pv=pv, action=action)
         max_reward = game_state.max_reward(action)
-        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, nn=nn) 
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
     else:
         print("No consensus on action - day followed by night")
         game_state = game.Game(units=units, pv=pv, action="day")
         max_reward = game_state.max_reward("day")
-        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, nn=nn) 
+        result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
         game_state_night = game.Game(units=node.game.units, pv=pv, action="night")
         if not game_state_night.is_terminal():
-            result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward, nn=nn)
+            result_night, root_night, n_actions, node = mcts_round(copy.deepcopy(game_state_night), max_reward)
             actions.append(n_actions)
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
+    print("before visualization")
     visualize_mcts(root)
+    print("after visualization")
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions
@@ -250,17 +287,23 @@ def try_nn():
         print(f"Target: {target_reward:.2f}, Predicted: {pred:.2f}")
 
 def create_random_game():
-    japanese, allied = choose_random()
-    units = [read_units(japanese), read_units(allied)]
+    japanese, allied = choose_from_all()
     pv = [0, 0]  # Placeholder for player values
     action = "day"  # Placeholder for action
-    game_state = game.Game(units=units, pv=pv, action=action)
+    game_state = game.Game(units=[japanese, allied], pv=pv, action=action)
     return game_state
 
+def generate_data():
+    data = ds.self_play_and_generate_training_data(100)
+    with open("results.txt", "a") as f:
+        for (game, reward) in data:
+            f.write(f"{game.encode()}:{reward}\n")
+
 if __name__ == "__main__":
-    #start = time.time()
+    start = time.time()
     #val_pred = try_nn()
-    #end = time.time()
-    #print("Execution time:", end - start, "seconds")
+    main()
+    end = time.time()
+    print("Execution time:", end - start, "seconds")
     #print(val_pred)
-    mcts_vs_nn()
+    #mcts_vs_nn()

@@ -7,15 +7,27 @@ import tensorflow as tf
 
 class Game:
     
-    def __init__(self, units, pv, action):
+    def __init__(self, units, pv, action, j_active=None, a_active=None):
         #eles usam (A)S-D-V - aereo, superficie, defesa, velocidade
         self.units = units
         self.action = action
         self.pv = pv
+        if j_active and a_active :
+            self.j_active = j_active
+            self.a_active = a_active 
+        elif action == 'day':
+            self.j_active = [i for i, p in enumerate(self.units[0]) if p["type"] != 'BB' and p['damage'] != float('inf')]
+            self.a_active = [i for i, p in enumerate(self.units[1]) if p['damage'] != float('inf')]
+        else:
+            self.j_active = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.a_active = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+        print("j_active:", self.j_active)
+        print("a_active:", self.a_active)
 
     def step(self, actions):
         rewards = [0, 0]
         change_gunnery, change_airstrike, change_isElite = [], [], []
+        j_active, a_active = self.j_active, self.a_active
         for player in range(2):
             action = actions[player]
             units = self.units[player]
@@ -43,6 +55,8 @@ class Game:
                         if target['damage'] == float('inf'):
                             prop -= 1
                             reward = [0.5*y for y in damage]
+                            print("action is:", action[i])
+                            j_active.remove(action[i]) if player == 1 else a_active.remove(action[i])
                         if capacity != 1:
                             proportion = 0.5 * prop / (capacity - 1)
                         else:
@@ -55,13 +69,27 @@ class Game:
             unit['isElite'] = [False, False]
         for target in change_airstrike:
             target['attack'][0] = 0
-        return rewards, self.is_terminal()
+        return rewards, j_active, a_active
 
     def is_terminal(self):
-        aa0 = self.actions_available(0)
+        """aa0 = self.actions_available(0)
         aa1 = self.actions_available(1)
         return all([u['damage'] == float('inf') for u in self.units[0]]) or all([u['damage'] == float('inf') for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
-        
+        """  
+        def all_dead(units):
+            return all(u['damage'] == float('inf') for u in units)
+
+        if all_dead(self.units[0]) or all_dead(self.units[1]):
+            return True
+        aa0 = self.actions_available(0)
+        aa1 = self.actions_available(1)
+        if len(aa0) == 0:
+            return True
+        if len(aa1) == 0:
+            return True
+        return False
+
+
     def max_reward(self, action): #fazemos para 0 porque é igual
         reward_j, reward_a = 0, 0
         for unit in self.units[0]:
@@ -105,45 +133,51 @@ class Game:
             return [self.pv[0], -self.pv[0]]
         if not all([u['damage'] == float('inf') for u in self.units[1]]) and all([u['damage'] == float('inf') for u in self.units[0]]) :
             return [-self.pv[1], self.pv[1]]
-        if all([a is None for a in self.actions_available(0)]) and not all([a is None for a in self.actions_available(1)]):
+        if all([a is None for a in self.action_available(0)]) and not all([a is None for a in self.action_available(1)]):
             return [-self.pv[1], self.pv[1]]
-        if all([a is None for a in self.actions_available(1)]) and not all([a is None for a in self.actions_available(0)]):
+        if all([a is None for a in self.action_available(1)]) and not all([a is None for a in self.action_available(0)]):
             return [self.pv[0], -self.pv[0]]
         return [0, 0]
     
     def actions_available(self, player):
-        total_units = len(self.units[player])
-        if self.action == 'day':
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != 'BB' and p['damage'] != float('inf')]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p['damage'] != float('inf')]
-        else:
-            active_units = [i for i, p in enumerate(self.units[player]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
-            active_targets = [i for i, p in enumerate(self.units[1 - player]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
-
-        if not active_units or not active_targets:
+        if not self.j_active or not self.a_active:
             return []
-
+        units = self.j_active if player == 0 else self.a_active
+        targets = self.a_active if player == 0 else self.j_active
+        total_units = len(units)
         valid_actions = []
 
-        if len(active_targets) >= len(active_units):
-            for perm in permutations(active_targets, len(active_units)):
-                action = [None] * total_units
-                for unit_idx, target in zip(active_units, perm):
-                    action[unit_idx] = target
-                valid_actions.append(action)
+        if len(targets) >= total_units:
+            # Usar permutações sem repetição
+            target_combos = permutations(targets, total_units)
+        else:
+            # Usar produto cartesiano com repetição
+            target_combos = product(targets, repeat=total_units)
+
+        for combo in target_combos:
+            action = [None] * (max(units) + 1)
+            for unit_idx, target in zip(units, combo):
+                action[unit_idx] = target
+            valid_actions.append(action)
+
         return valid_actions
      
     def get_next_state(self, actions):
-        new_game = Game(copy.deepcopy(self.units), self.pv, self.action)
-        reward, _ = new_game.step(actions)
+        game_copy = Game(copy.deepcopy(self.units), self.pv, self.action)
+        reward, j_active, a_active = game_copy.step(actions)
+        new_game = Game(copy.deepcopy(self.units), self.pv, self.action, j_active, a_active)
         i = 3
         while new_game == self and i > 0:
             i -= 1
-            reward, _ = new_game.step(actions)
+            reward, j_active, a_active = new_game.step(actions)
         if new_game == self:
             return None, [0, 0]
         return new_game, reward
     
+    def action_available(self, player):
+        options = self.actions_available(player)
+        return random.choice(options) if options else []
+
     def __eq__(self, other):
         if not isinstance(other, Game) or self.action != other.action or self.pv != other.pv:
             return False

@@ -40,14 +40,11 @@ def visualize_mcts(root, nn=False):
     node_shapes = {}
 
     # Map from (parent, child) to label (from parent node)
-    edge_labels = {}
 
     def add_edges(node, parent_id=None):
         node_id = id(node)
         if isinstance(node, mcts.DecisionNode) and node.player == 0:
-            node_label = f"{[u['damage'] if u['damage'] != float('inf') else '-' for u in node.game.units[0]]}" \
-                        f"{[u['damage'] if u['damage'] != float('inf') else '-' for u in node.game.units[1]]}\n" \
-                        f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
+            node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
         elif isinstance(node, mcts.ChanceNode):
             node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
         else:
@@ -55,7 +52,7 @@ def visualize_mcts(root, nn=False):
         
         G.add_node(node_id, label=node_label, node_obj=node)  # Store node_obj for reference
 
-        if node.game.is_terminal():
+        if node.is_fully_expanded():
             node_shapes[node_id] = "square"
         elif isinstance(node, mcts.ChanceNode):
             node_shapes[node_id] = "star"
@@ -67,10 +64,6 @@ def visualize_mcts(root, nn=False):
         if parent_id:
             G.add_edge(parent_id, node_id)
             child_node = node  # since `node_id` corresponds to the current (child) node
-            if isinstance(child_node, mcts.DecisionNode):
-                edge_labels[(parent_id, node_id)] = child_node.action
-            else:
-                edge_labels[(parent_id, node_id)] = child_node.a_action
 
         for child in node.children:
             add_edges(child, node_id)
@@ -95,11 +88,9 @@ def visualize_mcts(root, nn=False):
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
     plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
     plt.show()
-
     #plt.savefig(f"mcts_tree_{'NN' if nn else 'Normal'}.png", format="png", bbox_inches="tight")
 
 def choose_from_part():
@@ -120,38 +111,36 @@ def choose_from_part():
     japanese = read_units([A, B])
     allied = read_units([D, E])
     print(len(japanese), len(allied))
-    num = len(japanese) + len(allied)
-    return num, japanese, allied
+    return japanese, allied
 
 def choose_from_all():
     with open("units_total.json", "r") as file:
         units = json.load(file)
-    
     units = units["units"]
-    number = random.randint(3, 40)
-    chosen = random.sample(units, number)
-    japanese, allied = [], []
-
-    for unit in chosen:
+    allied, japanese = [], []
+    for unit in units:
+        valid = True
         attack = {"Air": 0, "Sea": 0}
         is_elite = {"Air": None, "Sea": None}
         for area in unit["attackDomains"]:
             attack[area["domain"]] = area["attack"]
             is_elite[area["domain"]] = area["isElite"]
+        if unit["type"] not in ["LBA", "CV", "BB"]:
+            valid = False
         transformed_unit = {
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
-            "damage": 0,
-            "type": unit["type"],
+            "damage": 0 if (valid and random.random() < 0.1) else float("inf"),
+            "type": unit["type"] ,
             "attackValue":[attack["Air"], attack["Sea"]]
         }
         if unit["name"].startswith("IJN"):
             japanese.append(transformed_unit)
         else:
             allied.append(transformed_unit)
-    print(len(japanese), len(allied))
-    return number, japanese, allied
+    print("Japanese units:", len(japanese), "Allied units:", len(allied))
+    return japanese, allied
 
 def represent(game, action, player):
     print("Action type: ", game.action)
@@ -183,15 +172,14 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=10, nn=None):
+def mcts_round(game_state, max_reward, iterations=100, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
     node = tree.search(root, iterations=iterations)
-    print("Root has", root.visits, "visits and value", root.value)
     """
-    while not node.game.is_terminal():
+    while not node.is_fully_expanded():
         if isinstance(node, mcts.ChanceNode):
             print("actions", node.j_action, node.a_action)
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
@@ -240,7 +228,7 @@ def mcts_vs_nn():
     return result, result_nn 
     
 def main():    
-    num, japanese, allied = choose_from_all()
+    japanese, allied = choose_from_all()
     units = [japanese, allied]
     pv = [0, 0] #[random.randint(1, 3), random.randint(1, 3)]
     action = "day" #choose_action(units, pv, nn) 
@@ -263,9 +251,7 @@ def main():
             result = [x+y for x, y in zip(result, result_night)]    
         else:
             print("Game was already over before night action started.")
-    print("before visualization")
     visualize_mcts(root)
-    print("after visualization")
     if root_night:
         visualize_mcts(root_night)
     return result, root.value, action, actions
@@ -292,12 +278,6 @@ def create_random_game():
     action = "day"  # Placeholder for action
     game_state = game.Game(units=[japanese, allied], pv=pv, action=action)
     return game_state
-
-def generate_data():
-    data = ds.self_play_and_generate_training_data(100)
-    with open("results.txt", "a") as f:
-        for (game, reward) in data:
-            f.write(f"{game.encode()}:{reward}\n")
 
 if __name__ == "__main__":
     start = time.time()

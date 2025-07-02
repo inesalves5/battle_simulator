@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.keras import layers, models
 import numpy as np
 
-TOTAL_UNITS = 4
+TOTAL_UNITS = 190 # Total number of units in the real game
 
 class ValueMLP(tf.keras.Model):
     def __init__(self, input_dim=TOTAL_UNITS):

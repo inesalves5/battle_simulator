@@ -1,7 +1,8 @@
 import math
 import random
 import copy
-import game   
+import game
+import main   
 
 class ChanceNode: #node de chance
     def __init__(self, game_state, parent, j_action, a_action, reward=[0, 0]):
@@ -74,12 +75,12 @@ class DecisionNode: #node para as acoes
         self.visits = 1 if root else 0
         self.value = [0, 0]
         self.action = action if player == 1 else ' '
-        self.untried_actions = list(game.actions_available(player))
         self.player = player
         self.reward = reward
+        self.untried_actions = game.actions_available(player)
 
     def is_fully_expanded(self):
-        return len(self.untried_actions) == 0
+        return not self.untried_actions
 
     def best_child(self, exploration_weight=2):
         '''Selects the best child based on UCT value.'''  
@@ -138,7 +139,8 @@ class MCTS:
     
     def sample(self, node):
         rewards = node.reward
-        while not node.game.is_terminal():
+        while not node.is_fully_expanded():
+            print("Expanding node")
             if isinstance(node, ChanceNode):
                 node, reward = node.expand()
                 rewards = [x+y for x, y in zip(reward, rewards)]
@@ -152,7 +154,7 @@ class MCTS:
                 break
             else:
                 node, _ = self.select_action(node)
-        if node is not None and node.game.is_terminal():
+        if node is not None and node.is_fully_expanded():
             rewards = [x+y for x, y in zip(rewards, node.game.reward_zone())] 
         self.backpropagate(node, rewards)
         return rewards    
@@ -171,14 +173,14 @@ class MCTS:
         rewards = [0, 0]
         if node.player == 1:
             j_action = node.action
-            a_action = random.choice(list(current_game.actions_available(1)))
+            a_action = current_game.action_available(1)
             current_game, reward = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
             if current_game is None:
                 return None
         while not current_game.is_terminal():
-            j_action = random.choice(list(current_game.actions_available(0)))
-            a_action = random.choice(list(current_game.actions_available(1)))
+            j_action = current_game.action_available(0)
+            a_action = current_game.action_available(1)
             current_game, reward = current_game.get_next_state([j_action, a_action])
             if current_game is None:
                 return None

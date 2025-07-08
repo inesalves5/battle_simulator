@@ -30,7 +30,7 @@ def simulate(game_state):
     r = [0, 0]
     games = []
     g = copy.deepcopy(game_state)
-    while not g.is_terminal():
+    while g.is_terminal():
         games.append(g)
         a0 = g.action_available(0)
         a1 = g.action_available(1)
@@ -38,15 +38,34 @@ def simulate(game_state):
         if g is None:
             break
         r = [x + y for x, y in zip(r, reward)]
-    if g is not None:
+    if g is not None and g not in games:
         games.append(g)
         r = [x + y for x, y in zip(r, g.reward_zone())]
     return r[0], games
 
 def self_play_and_generate_training_data(file):
-    game_state = main.create_random_game()
-    r, games = simulate(game_state)
-    file.write(f"{game_state.encode()}:{r}\n")
+    with open(file, "w") as f:
+        #for _ in range(100):
+        game_state = main.create_random_game()
+        r, games = simulate(game_state)
+        print("sim ended")
+        """
+        if game_state not in games:
+            games.append(game_state)
+        all_games = games.copy()
+        for game_part in games:
+            equivalent = game_part.generate_equivalent_games()
+            all_games.append(game_ex for game_ex in equivalent if game_ex not in all_games)
+        for game_state in all_games:
+            file.write(f"{game_state.encode()}:{r}\n")
+        """
+        equivalent_games = game_state.generate_equivalent_games()
+        print("eq genrerated")
+        equivalent_games.append(game_state)
+        for game_ex in equivalent_games:
+            f.write(f"{game_ex.encode()}:{r}\n")
+        print("games written")
+    return list(zip(equivalent_games, [r] * len(equivalent_games)))
 
 if __name__ == "__main__":
     with open("results.txt", "a") as f:

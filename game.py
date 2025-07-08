@@ -4,6 +4,7 @@ import random
 import copy
 from collections import defaultdict
 import tensorflow as tf
+import json
 
 class Game:
     
@@ -21,8 +22,7 @@ class Game:
         else:
             self.j_active = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
             self.a_active = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
-        print("j_active:", self.j_active)
-        print("a_active:", self.a_active)
+        self.terminal = None
 
     def step(self, actions):
         rewards = [0, 0]
@@ -55,7 +55,6 @@ class Game:
                         if target['damage'] == float('inf'):
                             prop -= 1
                             reward = [0.5*y for y in damage]
-                            print("action is:", action[i])
                             j_active.remove(action[i]) if player == 1 else a_active.remove(action[i])
                         if capacity != 1:
                             proportion = 0.5 * prop / (capacity - 1)
@@ -71,24 +70,23 @@ class Game:
             target['attack'][0] = 0
         return rewards, j_active, a_active
 
-    def is_terminal(self):
+    def check_if_terminal(self):
         """aa0 = self.actions_available(0)
         aa1 = self.actions_available(1)
         return all([u['damage'] == float('inf') for u in self.units[0]]) or all([u['damage'] == float('inf') for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
-        """  
-        def all_dead(units):
-            return all(u['damage'] == float('inf') for u in units)
-
-        if all_dead(self.units[0]) or all_dead(self.units[1]):
+        if not self.j_active or not self.a_active:
             return True
         aa0 = self.actions_available(0)
         aa1 = self.actions_available(1)
-        if len(aa0) == 0:
+        if aa0 == []:
             return True
-        if len(aa1) == 0:
+        if aa1 == []:
             return True
         return False
-
+        """  
+        terminal = not self.actions_available(0) or not self.actions_available(1) 
+        self.terminal = terminal
+        return terminal
 
     def max_reward(self, action): #fazemos para 0 porque é igual
         reward_j, reward_a = 0, 0
@@ -156,16 +154,24 @@ class Game:
 
         for combo in target_combos:
             action = [None] * (max(units) + 1)
+            changed = False
             for unit_idx, target in zip(units, combo):
+                changed = True
                 action[unit_idx] = target
-            valid_actions.append(action)
+            if changed:
+                valid_actions.append(action)
 
         return valid_actions
-     
+    
+    def is_terminal(self):
+        if self.terminal is None:
+            return self.check_if_terminal()
+        return self.terminal
+
     def get_next_state(self, actions):
         game_copy = Game(copy.deepcopy(self.units), self.pv, self.action)
         reward, j_active, a_active = game_copy.step(actions)
-        new_game = Game(copy.deepcopy(self.units), self.pv, self.action, j_active, a_active)
+        new_game = Game(game_copy.units, game_copy.pv, game_copy.action, j_active, a_active)
         i = 3
         while new_game == self and i > 0:
             i -= 1
@@ -186,21 +192,20 @@ class Game:
     def _eq_unit_lists(self, list1, list2):            
         if len(list1) != len(list2):
             return False
-        matched = [False] * len(list2)
-        for u1 in list1:
-            found_match = False
-            for i, u2 in enumerate(list2):
-                if not matched[i] and self._eq_units(u1, u2):
-                    matched[i] = True
-                    found_match = True
-                    break
-            if not found_match:
+        for i in range(len(list1)):
+            if list1[i]["damage"] == list2[i]["damage"] and \
+                all(list1[i]["attack"][l]==list2[i]["attack"][l] for l in range(2)) and \
+                all(list1[i]["isElite"][r]==list2[i]["isElite"][r] for r in range(2)):
                 return False
         return True
     
     def _eq_units(self, u1, u2):
-        return all(u1['attack'][i] == u2['attack'][i] for i in range(len(u1['attack']))) and \
-                    all(u1['isElite'][i] == u2['isElite'][i] for i in range(len(u1['isElite']))) and  \
+        if self.action == 'night' and u1['type'] == 'LBA' and u2['type'] == 'LBA':
+            return True  # LBA units are not compared in night mode bc they can't attack or be attacked
+        if self.action == 'day' and u1['type'] == 'BB' and u2['type'] == 'BB':
+            return u1['defense'] == u2['defense']  # BB units are not compared in day mode bc they can't attack
+        return all(u1['attack'][i] == u2['attack'][i] for i in range(2)) and \
+                    all(u1['isElite'][i] == u2['isElite'][i] for i in range(2)) and  \
                     u1["defense"] == u2["defense"] and \
                     u1['damage'] == u2['damage'] and \
                     u1["type"] == u2["type"] and \
@@ -221,3 +226,82 @@ class Game:
                     t = unit['damage'] / (unit["defense"] + 1)
                 features.append(t)
         return tf.convert_to_tensor(features, dtype=tf.float32)
+
+    def def_equivalent_units(self, action):
+        with open(f'equivalent_units_{action}.json', 'w') as f:
+            data = defaultdict(list)
+            for player in range(2):
+                for idx_unit, unit in enumerate(self.units[player]):
+                    equivalents = []
+                    for idx, other_unit in enumerate(self.units[player]):
+                        if idx != idx_unit and self._eq_units(unit, other_unit):
+                            equivalents.append(idx)
+                    data[idx_unit if player == 0 else idx_unit + len(self.units[0])] = equivalents
+            json.dump(data, f)
+    
+    def generate_equivalent_games_1(self):
+        with open(f'equivalent_units_{self.action}.json', 'r') as f:
+            data = json.load(f)
+        equivalent_games = []
+        for player in range(2):
+            for idx_unit, unit in enumerate(self.units[player]):
+                if unit['damage'] != float('inf'):
+                    options = data.get(str(idx_unit if player == 0 else idx_unit + len(self.units[0])), [])
+                    for option in options:
+                        new_units = [u.copy() for u in self.units[player]]
+                        new_units[option] = self.units[player][idx_unit].copy()
+                        new_units[idx_unit]["damage"] = float("inf")
+                        equivalent_games.append(Game(units=[new_units, self.units[1-player]], action=self.action, pv=self.pv))
+        return equivalent_games
+
+    def generate_equivalent_games(self):
+        with open(f'equivalent_units_{self.action}.json', 'r') as f:
+            data = json.load(f)
+            equivalent_games = []
+            unit_options = []
+            idx_map = [] 
+            for player in range(2):
+                for idx_unit, unit in enumerate(self.units[player]):
+                    if unit['damage'] != float('inf'):
+                        key = str(idx_unit if player == 0 else idx_unit + len(self.units[0]))
+                        equivalents = data.get(key, [])
+                        valid_equivalents = []
+                        for eq_idx in equivalents:
+                            if eq_idx < len(self.units[0]):
+                                valid_equivalents.append(eq_idx)
+                            elif eq_idx >= len(self.units[0]):
+                                valid_equivalents.append(eq_idx)
+                        unit_options.append([idx_unit] + valid_equivalents)
+                        idx_map.append(idx_unit)
+        for replacement_indices in product(*unit_options):
+            new_units_j = [unit.copy() for unit in self.units[0]]
+            new_units_a = [unit.copy() for unit in self.units[1]]
+            j_active = self.j_active.copy()
+            a_active = self.a_active.copy()
+            for orig_idx, repl_idx in zip(idx_map, replacement_indices):
+                if repl_idx != orig_idx:
+                    if repl_idx in j_active and orig_idx in j_active:
+                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
+                        new_units_j[orig_idx] = self.units[0][repl_idx].copy()
+                    elif repl_idx in j_active and orig_idx in a_active:
+                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
+                        new_units_a[orig_idx-len(self.units[0])] = self.units[1][repl_idx].copy()
+                    elif repl_idx in a_active and orig_idx in a_active:
+                        new_units_a[repl_idx] = self.units[1][orig_idx-len(self.units[0])].copy()
+                        new_units_a[orig_idx] = self.units[1][repl_idx-len(self.units[0])].copy()
+                    elif repl_idx in a_active and orig_idx in j_active:
+                        new_units_a[repl_idx] = self.units[1][orig_idx].copy()
+                        new_units_j[orig_idx-len(self.units[0])] = self.units[0][repl_idx].copy()
+                    elif repl_idx < len(self.units[0]) and repl_idx not in j_active and orig_idx in j_active:  #casos de replicas inativas
+                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
+                        new_units_j[orig_idx]['damage'] = float('inf')
+                        j_active.remove(orig_idx)
+                        j_active.append(repl_idx)
+                    elif repl_idx >= len(self.units[0]) and repl_idx not in a_active and orig_idx in a_active:
+                        new_units_a[repl_idx-len(self.units[0])] = self.units[1][orig_idx-len(self.units[0])].copy()
+                        a_active.remove(orig_idx)
+                        a_active.append(repl_idx-len(self.units[0]))
+                        new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
+            new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=j_active, a_active=a_active)
+            equivalent_games.append(new_game)
+        return equivalent_games

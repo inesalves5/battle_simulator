@@ -139,8 +139,7 @@ class MCTS:
     
     def sample(self, node):
         rewards = node.reward
-        while not node.is_fully_expanded():
-            print("Expanding node")
+        while not node.game.is_terminal():
             if isinstance(node, ChanceNode):
                 node, reward = node.expand()
                 rewards = [x+y for x, y in zip(reward, rewards)]
@@ -154,7 +153,7 @@ class MCTS:
                 break
             else:
                 node, _ = self.select_action(node)
-        if node is not None and node.is_fully_expanded():
+        if node is not None and node.game.is_terminal():
             rewards = [x+y for x, y in zip(rewards, node.game.reward_zone())] 
         self.backpropagate(node, rewards)
         return rewards    

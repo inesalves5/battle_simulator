@@ -179,7 +179,7 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=1, nn=None):
+def mcts_round(game_state, max_reward, iterations=50, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -229,8 +229,8 @@ def mcts_vs_nn():
     print("Without NN")
     result, root, _, _ = mcts_round(copy.deepcopy(game_state), max_reward) 
     print("value w/o NN: ", root.value)
-    #visualize_mcts(root, nn=False)
-    #visualize_mcts(root_nn, nn=True)    
+    visualize_mcts(root, nn=False)
+    visualize_mcts(root_nn, nn=True)    
     return result, result_nn 
     
 def main():    
@@ -285,6 +285,9 @@ def create_random_game(action="day"):
     japanese, allied = choose_from_all()
     pv = [0, 0]  # Placeholder for player values
     game_state = game.Game(units=[japanese, allied], pv=pv, action=action)
+    if game_state.is_terminal():
+        return create_random_game(action)
+    print("new game has:", game_state.j_active, game_state.a_active)
     return game_state
 
 def generate_eq_units():

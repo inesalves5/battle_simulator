@@ -169,7 +169,7 @@ class Game:
         return self.terminal
 
     def get_next_state(self, actions):
-        game_copy = Game(copy.deepcopy(self.units), self.pv, self.action)
+        game_copy = Game(self.units.copy(), self.pv, self.action)
         reward, j_active, a_active = game_copy.step(actions)
         new_game = Game(game_copy.units, game_copy.pv, game_copy.action, j_active, a_active)
         i = 3
@@ -303,5 +303,6 @@ class Game:
                         a_active.append(repl_idx-len(self.units[0]))
                         new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
             new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=j_active, a_active=a_active)
-            equivalent_games.append(new_game)
+            if new_game not in equivalent_games:
+                equivalent_games.append(new_game)        
         return equivalent_games

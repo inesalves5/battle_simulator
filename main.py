@@ -120,7 +120,8 @@ def get_test_case():
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
-            "damage": 0 if unit["name"] in ["IJN_LBA_21stFlottilla", "IJN_LBA_22ndFlottilla", "USN_CV_Hancock"] else float("inf"),
+			"name":"USN_LBA_11thAF",
+            "damage": 0 if unit["name"] in ["IJN_LBA_21stFlottilla", "USN_LBA_10thAF", "USN_LBA_11thAF"] else float("inf"),
             "type": unit["type"] ,
             "attackValue":[attack["Air"], attack["Sea"]]
         }
@@ -207,7 +208,7 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=10, nn=None):
+def mcts_round(game_state, max_reward, iterations=100, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -345,6 +346,6 @@ if __name__ == "__main__":
         f.write(f"{v}\n")
     """
     main()
-    game = get_test_case()
-    eq = game.generate_equivalent_games({54:102}, {102:55})
-    print(eq)
+    #game = get_test_case()
+    #eq = game.generate_equivalent_games({54:102}, {102:55})
+    #print(eq)

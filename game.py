@@ -26,7 +26,7 @@ class Game:
 
     def step(self, actions):
         rewards = [0, 0]
-        changes = []
+        changes, removals = [], []
         change_gunnery, change_airstrike, change_isElite = [], [], []
         j_active, a_active = self.j_active, self.a_active
         rolls = []
@@ -61,7 +61,6 @@ class Game:
                         if target['damage'] == float('inf'):
                             prop -= 1
                             reward = [0.5*y for y in damage]
-                            j_active.remove(t) if player == 1 else a_active.remove(t)
                         if capacity != 1:
                             proportion = 0.5 * prop / (capacity - 1)
                         else:
@@ -77,6 +76,12 @@ class Game:
             target['attack'][0] = 0
         for target, new_state in changes:
             target['damage'] = new_state
+        for idx, unit in enumerate(self.units[0]):
+            if idx in j_active and unit['damage'] == float('inf'):
+                j_active.remove(idx)
+        for idx, unit in enumerate(self.units[1]):
+            if idx in a_active and unit['damage'] == float('inf'):
+                a_active.remove(idx)
         return rewards, j_active, a_active, rolls
 
     def check_if_terminal(self):
@@ -177,16 +182,13 @@ class Game:
         return self.terminal
 
     def get_next_state(self, actions):
-        new_game = copy.deepcopy(self)
+        new_game = Game(units=self.units.copy(), action=self.action, pv=self.pv, j_active=self.j_active.copy(), a_active=self.a_active.copy())
         reward, j_active, a_active, rolls = new_game.step(actions)
-        new_game.j_active = j_active
-        new_game.a_active = a_active
         i = 3
         while new_game == self and i > 0:
+            print(rolls, self, self.check_if_terminal())
             i -= 1
             reward, j_active, a_active, rolls = new_game.step(actions)
-            new_game.j_active = j_active
-            new_game.a_active = a_active
         if new_game == self:
             return None, [0, 0], None
         return new_game, reward, rolls
@@ -237,7 +239,7 @@ class Game:
                     all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
     
     def __str__(self):
-        return f"{[unit['damage'] for unit in self.units[0]], [unit['damage'] for unit in self.units[1]]}"
+        return f"{[self.units[0][i]['damage'] for i in self.j_active], [self.units[1][i]['damage'] for i in self.a_active]}"
 
     def encode(self):
         features = []

@@ -80,8 +80,8 @@ def self_play_and_generate_training_data():
                 f.write(json.dumps({"game": features, "actions": [a0, a1], "result": r}) + "\n")
 
 if __name__ == "__main__":
-    for _ in range(10000):
-        self_play_and_generate_training_data()
+    #for _ in range(10000):
+    self_play_and_generate_training_data()
 """
 if __name__ == "__main__":
     with open("results.txt", "r") as f:

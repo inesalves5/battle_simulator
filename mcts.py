@@ -5,7 +5,7 @@ import game
 import main   
 
 class ChanceNode: #node de chance
-    def __init__(self, game_state, parent, j_action, a_action, reward=[0, 0]):
+    def __init__(self, game_state, parent, j_action, a_action, reward=[0, 0], rolls = None):
         self.game = game_state
         self.parent = parent
         self.children = []
@@ -15,7 +15,8 @@ class ChanceNode: #node de chance
         self.a_action = a_action
         self.max_reward = parent.max_reward
         self.reward = reward
-        
+        self.rolls = rolls
+
     def is_fully_expanded(self):
         return False
     
@@ -29,10 +30,11 @@ class ChanceNode: #node de chance
 
     def expand(self):
         '''Expands by adding a new child node.'''
-        game_copy, reward = self.game.get_next_state([self.j_action, self.a_action])
+        game_copy, reward, rolls = self.game.get_next_state([self.j_action, self.a_action])
         if game_copy is None:
             return None, [0, 0]
-        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)])
+        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)], rolls=rolls)
+        self.rolls = rolls
         for existing_child in self.children:
             if existing_child == child_node:
                 return existing_child, reward
@@ -67,7 +69,7 @@ class ChanceNode: #node de chance
         return final
 
 class DecisionNode: #node para as acoes 
-    def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0], root=False):         
+    def __init__(self, game, max_reward, parent=None, action=None, player=0, reward=[0,0], root=False, rolls=None):         
         self.game = game
         self.max_reward = max_reward   
         self.parent = parent
@@ -78,6 +80,7 @@ class DecisionNode: #node para as acoes
         self.player = player
         self.reward = reward
         self.untried_actions = game.actions_available(player)
+        self.rolls = rolls
 
     def is_fully_expanded(self):
         return not self.untried_actions
@@ -173,14 +176,14 @@ class MCTS:
         if node.player == 1:
             j_action = node.action
             a_action = current_game.action_available(1)
-            current_game, reward = current_game.get_next_state([j_action, a_action])
+            current_game, reward, _ = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
             if current_game is None:
                 return None
         while not current_game.is_terminal():
             j_action = current_game.action_available(0)
             a_action = current_game.action_available(1)
-            current_game, reward = current_game.get_next_state([j_action, a_action])
+            current_game, reward, _ = current_game.get_next_state([j_action, a_action])
             if current_game is None:
                 return None
             rewards = [x+y for x,y in zip(rewards, reward)]

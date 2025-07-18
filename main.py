@@ -65,8 +65,10 @@ def visualize_mcts(root, nn=False):
         if parent_id:
             G.add_edge(parent_id, node_id)
             child_node = node  # since `node_id` corresponds to the current (child) node
-            if isinstance(child_node, mcts.DecisionNode):
+            if isinstance(child_node, mcts.DecisionNode) and child_node.player == 1:
                 edge_labels[(parent_id, node_id)] = child_node.action
+            elif isinstance(child_node, mcts.DecisionNode):
+                edge_labels[(parent_id, node_id)] = child_node.rolls
             else:
                 edge_labels[(parent_id, node_id)] = child_node.a_action
 
@@ -93,7 +95,7 @@ def visualize_mcts(root, nn=False):
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    #nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
     plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
     plt.show()
@@ -118,7 +120,7 @@ def get_test_case():
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
-            "damage": float("inf"),
+            "damage": 0 if unit["name"] in ["IJN_LBA_21stFlottilla", "IJN_LBA_22ndFlottilla", "USN_CV_Hancock"] else float("inf"),
             "type": unit["type"] ,
             "attackValue":[attack["Air"], attack["Sea"]]
         }
@@ -134,9 +136,7 @@ def get_test_case():
     E = units["allied"][3]
     F = units["allied"][4]
     """
-    japanese[4]["damage"] = 0
-    allied[3]["damage"] = 0
-    game_state = game.Game(units=[japanese, allied], action="day", pv=[0, 0], j_active=[4], a_active=[3+len(japanese)])
+    game_state = game.Game(units=[japanese, allied], action="day", pv=[0, 0])
     return game_state
 
 def choose_from_all(j, a):
@@ -207,7 +207,7 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=1000, nn=None):
+def mcts_round(game_state, max_reward, iterations=10, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -267,7 +267,6 @@ def main():
     root_night = None
     if action != "day and night":
         print("Chosen action is:", action)
-        #game_state = game.Game(units=units, pv=pv, action=action)
         if game_state.is_terminal():
             print("Game is already over before MCTS started.")
             return [0, 0], 0, action, []
@@ -275,7 +274,6 @@ def main():
         result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
     else:
         print("No consensus on action - day followed by night")
-        game_state = game.Game(units=units, pv=pv, action="day")
         max_reward = game_state.max_reward("day")
         result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward) 
         game_state_night = game.Game(units=node.game.units, pv=pv, action="night")
@@ -341,10 +339,12 @@ if __name__ == "__main__":
         print(i.j_active, i.a_active)
     """
     """
-
     v = test_model_w_case()
     print(v)
     with open("preds.txt", "a") as f:
         f.write(f"{v}\n")
     """
     main()
+    game = get_test_case()
+    eq = game.generate_equivalent_games({54:102}, {102:55})
+    print(eq)

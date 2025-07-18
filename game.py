@@ -13,7 +13,7 @@ class Game:
         self.units = units
         self.action = action
         self.pv = pv
-        if j_active and a_active :
+        if j_active is not None and a_active is not None:
             self.j_active = j_active
             self.a_active = a_active 
         elif action == 'day':
@@ -26,21 +26,27 @@ class Game:
 
     def step(self, actions):
         rewards = [0, 0]
+        changes = []
         change_gunnery, change_airstrike, change_isElite = [], [], []
         j_active, a_active = self.j_active, self.a_active
+        rolls = []
         for player in range(2):
+            roll = []
             action = actions[player]
             units = self.units[player]
             opponent = self.units[1-player]
-            for i in range(len(action)):
-                if action[i] != None:
+            for attacker, t in action.items():
+                if t != None:
+                    target = opponent[t]
                     reward = [0, 0]
-                    target = opponent[action[i]]
                     capacity = target["defense"] if target["type"] == 'LBA' else target["defense"] + 1
                     state = target['damage']
                     if state == float('inf') or capacity == 0:
-                        continue          
-                    prop = self.damage(units[i], target)
+                        continue
+                    prop, new_state = self.damage(units[attacker], target)
+                    if new_state != state:
+                        changes.append((target, new_state))
+                    roll.append(prop)
                     prop = min(prop, capacity - state)
                     damage = self.reward(self.action, player, target)
                     if prop != 0 and target["type"] == 'BB':
@@ -55,20 +61,23 @@ class Game:
                         if target['damage'] == float('inf'):
                             prop -= 1
                             reward = [0.5*y for y in damage]
-                            j_active.remove(action[i]) if player == 1 else a_active.remove(action[i])
+                            j_active.remove(t) if player == 1 else a_active.remove(t)
                         if capacity != 1:
                             proportion = 0.5 * prop / (capacity - 1)
                         else:
                             proportion = 1
                         reward = [x + proportion * y for x, y in zip(reward, damage)]
                     rewards = [x + y for x, y in zip(rewards, reward)]
+            rolls.append(roll)
         for target in change_gunnery:
             target['attack'][1] = 1 if target['attack'][1] != 0 else 0
         for unit in change_isElite:
             unit['isElite'] = [False, False]
         for target in change_airstrike:
             target['attack'][0] = 0
-        return rewards, j_active, a_active
+        for target, new_state in changes:
+            target['damage'] = new_state
+        return rewards, j_active, a_active, rolls
 
     def check_if_terminal(self):
         """aa0 = self.actions_available(0)
@@ -114,7 +123,7 @@ class Game:
         index = 0 if self.action == 'day' else 1
         bonus = 1 if attacker['isElite'][index] and victim["type"] != 'LBA' else 0
         if state == float('inf'):
-            return 0
+            return 0, state
         roll = 0
         for _ in range(attacker['attack'][index]):
             roll += random.randint(1, 6) + bonus 
@@ -122,9 +131,8 @@ class Game:
             damage_value = random.randint(1, 6) + bonus 
             state += damage_value  
             if (victim["type"]=='LBA' and state >= victim["defense"]) or state > victim["defense"]: #afunda
-                state = float('inf')
-        victim['damage'] = state
-        return damage_value
+                state = float('inf')        
+        return damage_value, state
     
     def reward_zone(self):
         if not all([u['damage'] == float('inf') for u in self.units[0]]) and all([u['damage'] == float('inf') for u in self.units[1]]) :
@@ -153,7 +161,7 @@ class Game:
             target_combos = product(targets, repeat=total_units)
 
         for combo in target_combos:
-            action = [None] * (max(units) + 1)
+            action = {unit_idx: None for unit_idx in units}
             changed = False
             for unit_idx, target in zip(units, combo):
                 changed = True
@@ -169,16 +177,19 @@ class Game:
         return self.terminal
 
     def get_next_state(self, actions):
-        game_copy = Game(self.units.copy(), self.pv, self.action, self.j_active, self.a_active)
-        reward, j_active, a_active = game_copy.step(actions)
-        new_game = Game(game_copy.units, game_copy.pv, game_copy.action, j_active, a_active)
+        new_game = copy.deepcopy(self)
+        reward, j_active, a_active, rolls = new_game.step(actions)
+        new_game.j_active = j_active
+        new_game.a_active = a_active
         i = 3
         while new_game == self and i > 0:
             i -= 1
-            reward, j_active, a_active = new_game.step(actions)
+            reward, j_active, a_active, rolls = new_game.step(actions)
+            new_game.j_active = j_active
+            new_game.a_active = a_active
         if new_game == self:
-            return None, [0, 0]
-        return new_game, reward
+            return None, [0, 0], None
+        return new_game, reward, rolls
     
     def action_available(self, player):
         options = self.actions_available(player)
@@ -270,7 +281,7 @@ class Game:
                         equivalent_games.append(Game(units=[new_units, self.units[1-player]], action=self.action, pv=self.pv))
         return equivalent_games
 
-    def generate_equivalent_games(self):
+    def generate_equivalent_games(self, a0, a1):
         with open(f'equivalent_units_{self.action}.json', 'r') as f:
             data = json.load(f)
             equivalent_games = []
@@ -323,6 +334,8 @@ class Game:
                         a_active.remove(orig_idx)
                         a_active.append(repl_idx-len(self.units[0]))
                         new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
-            new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=j_active, a_active=a_active)
-            equivalent_games.append(new_game)    
+                new_a0 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a0.items()}
+                new_a1 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a1.items()}
+                new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=sorted(j_active), a_active=sorted(a_active))
+                equivalent_games.append((new_a0, new_a1, new_game))
         return equivalent_games

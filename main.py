@@ -214,14 +214,14 @@ def mcts_round(game_state, max_reward, iterations=100, nn=None):
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
     node = tree.search(root, iterations=iterations)
-    """
     while not node.game.is_terminal():
         if isinstance(node, mcts.ChanceNode):
             print("actions", node.j_action, node.a_action)
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
                    else c.value[1])
-    print(node.game)
-    """
+        for c in node.children:
+            if c.value == [0, 0]:
+                print(c.game.is_terminal(), c.game.check_if_terminal(), c.game)
     return rewards, tree.root, actions, node
 
 def read_units(data):

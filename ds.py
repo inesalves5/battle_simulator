@@ -51,18 +51,17 @@ def simulate(game_state):
         a0 = g.action_available(0)
         a1 = g.action_available(1)
         buffer.append((a0, a1, g))
-        new_g, reward, _ = g.get_next_state([a0, a1])
-        if new_g is None:
-            continue
-        else:
-            g = new_g
+        g, reward, _ = g.get_next_state([a0, a1])
+        if g is None:
+            break
         r = [x + y for x, y in zip(r, reward)]
     if g is not None:
         buffer.append((None, None, g))
         r = [x + y for x, y in zip(r, g.reward_zone())]
-    elif g is None:
+        return r, buffer
+    else:
         return None, None
-    return r, buffer
+    
 
 def self_play_and_generate_training_data():
     with open("res.json", "a") as f:
@@ -71,7 +70,8 @@ def self_play_and_generate_training_data():
             print("-----------------------case", n)
             game_state = main.create_random_game("day", a, j)
             r, buffer = simulate(game_state)
-            print("final reward in simulate:", r)
+            if r is None:
+                continue
             all_games = []
             for (a0, a1, game_part) in buffer:
                 all_games += game_part.generate_equivalent_games(a0, a1)
@@ -80,8 +80,8 @@ def self_play_and_generate_training_data():
                 f.write(json.dumps({"game": features, "actions": [a0, a1], "result": r}) + "\n")
 
 if __name__ == "__main__":
-    #for _ in range(10000):
-    self_play_and_generate_training_data()
+    for _ in range(10000):
+        self_play_and_generate_training_data()
 """
 if __name__ == "__main__":
     with open("results.txt", "r") as f:

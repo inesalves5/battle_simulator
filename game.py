@@ -186,7 +186,6 @@ class Game:
         reward, j_active, a_active, rolls = new_game.step(actions)
         i = 3
         while new_game == self and i > 0:
-            print(rolls, self, self.check_if_terminal())
             i -= 1
             reward, j_active, a_active, rolls = new_game.step(actions)
         if new_game == self:
@@ -336,8 +335,14 @@ class Game:
                         a_active.remove(orig_idx)
                         a_active.append(repl_idx-len(self.units[0]))
                         new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
-                new_a0 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a0.items()}
-                new_a1 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a1.items()}
+                if a0 is None:
+                    new_a0 = None
+                else:
+                    new_a0 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a0.items()}
+                if a1 is None:
+                    new_a1 = None   
+                else:
+                    new_a1 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a1.items()}
                 new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=sorted(j_active), a_active=sorted(a_active))
                 equivalent_games.append((new_a0, new_a1, new_game))
         return equivalent_games

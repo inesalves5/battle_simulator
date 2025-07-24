@@ -22,14 +22,16 @@ class GameValueDataset(tf.data.Dataset):
         targets = np.array(targets, dtype=np.float32)
         return tf.data.Dataset.from_tensor_slices((features, targets))
 
-def train_value_net(epochs=100, batch_size=1000, lr=1e-2):
+def train_value_net(epochs=1, batch_size=64, lr=1e-3):
     data = []
     with open("res.json", "r") as f:
-       for line in f:
+        """
+        for line in f:
             d = json.loads(line)
             features = d["game"]
             r = d["result"]
-            data.append([features, r])
+            data.append([features, r])"""
+        data = [json.loads(line) for line in f]
     dataset = GameValueDataset(data)
     dataset = dataset.shuffle(buffer_size=len(data)).batch(batch_size)
     model = NN.ValueMLP()
@@ -72,16 +74,16 @@ def self_play_and_generate_training_data():
             r, buffer = simulate(game_state)
             if r is None:
                 continue
+            print("result is:", r)
             all_games = []
             for (a0, a1, game_part) in buffer:
                 all_games += game_part.generate_equivalent_games(a0, a1)
             for (a0, a1, g) in all_games:
-                features = g.encode().numpy().tolist()
-                f.write(json.dumps({"game": features, "actions": [a0, a1], "result": r}) + "\n")
+                features = g.encode(a0, a1).numpy().tolist()
+                f.write(json.dumps({"game": features, "result": r}) + "\n")
 
 if __name__ == "__main__":
-    for _ in range(10000):
-        self_play_and_generate_training_data()
+    self_play_and_generate_training_data()
 """
 if __name__ == "__main__":
     with open("results.txt", "r") as f:

@@ -25,6 +25,7 @@ class Game:
         self.terminal = None
 
     def step(self, actions):
+        game_copy = copy.deepcopy(self)
         rewards = [0, 0]
         changes, removals = [], []
         change_gunnery, change_airstrike, change_isElite = [], [], []
@@ -33,20 +34,18 @@ class Game:
         for player in range(2):
             roll = []
             action = actions[player]
-            units = self.units[player]
-            opponent = self.units[1-player]
             for attacker, t in action.items():
                 if t != None:
-                    target = opponent[t]
+                    target =  self.units[1-player][t]
                     reward = [0, 0]
                     capacity = target["defense"] if target["type"] == 'LBA' else target["defense"] + 1
                     state = target['damage']
                     if state == float('inf') or capacity == 0:
                         continue
-                    prop, new_state = self.damage(units[attacker], target)
-                    if new_state != state:
-                        changes.append((target, new_state))
+                    prop = self.damage(self.units[player][attacker], target)
                     roll.append(prop)
+                    if prop != 0:
+                        changes.append((target, prop))
                     prop = min(prop, capacity - state)
                     damage = self.reward(self.action, player, target)
                     if prop != 0 and target["type"] == 'BB':
@@ -74,12 +73,20 @@ class Game:
             unit['isElite'] = [False, False]
         for target in change_airstrike:
             target['attack'][0] = 0
-        for target, new_state in changes:
-            target['damage'] = new_state
+        for target, damage in changes:
+            target['damage'] += damage
         for idx, unit in enumerate(self.units[0]):
+            if unit['type'] == 'LBA' and unit['damage'] >= unit['defense']:
+                unit['damage'] = float('inf')
+            elif unit['damage'] > unit['defense']:
+                unit['damage'] = float('inf')
             if idx in j_active and unit['damage'] == float('inf'):
                 j_active.remove(idx)
         for idx, unit in enumerate(self.units[1]):
+            if unit['type'] == 'LBA' and unit['damage'] >= unit['defense']:
+                unit['damage'] = float('inf')
+            elif unit['damage'] > unit['defense']:
+                unit['damage'] = float('inf')
             if idx in a_active and unit['damage'] == float('inf'):
                 a_active.remove(idx)
         return rewards, j_active, a_active, rolls
@@ -124,20 +131,16 @@ class Game:
     
     def damage(self, attacker, victim):
         damage_value = 0
-        state = victim['damage']
         index = 0 if self.action == 'day' else 1
         bonus = 1 if attacker['isElite'][index] and victim["type"] != 'LBA' else 0
-        if state == float('inf'):
-            return 0, state
+        if victim['damage'] == float('inf'):
+            return 0, float('inf')
         roll = 0
         for _ in range(attacker['attack'][index]):
             roll += random.randint(1, 6) + bonus 
         if roll >= 6:
-            damage_value = random.randint(1, 6) + bonus 
-            state += damage_value  
-            if (victim["type"]=='LBA' and state >= victim["defense"]) or state > victim["defense"]: #afunda
-                state = float('inf')        
-        return damage_value, state
+            damage_value = random.randint(1, 6) + bonus         
+        return damage_value
     
     def reward_zone(self):
         if not all([u['damage'] == float('inf') for u in self.units[0]]) and all([u['damage'] == float('inf') for u in self.units[1]]) :
@@ -240,19 +243,23 @@ class Game:
     def __str__(self):
         return f"{[self.units[0][i]['damage'] for i in self.j_active], [self.units[1][i]['damage'] for i in self.a_active]}"
 
-    def encode(self):
+    def encode(self, a0 = None, a1 = None):
         features = []
-        for player in range(len(self.units)):
-            for unit in self.units[player]:
+        for player, units in [(0, a0), (1, a1)]:
+            for idx, unit in enumerate(self.units[player]):
                 if unit['damage'] == float('inf'):
-                    t = 0.0
+                    d = 0.0
                 elif unit["damage"] == 0:
-                    t = 1.0
+                    d = 1.0
                 elif unit["type"] == 'LBA':
-                    t = 1 - (unit['damage'] / unit["defense"])
+                    d = 1 - (unit['damage'] / unit["defense"])
                 else:
-                    t = 1 - (unit['damage'] / (unit["defense"] + 1))
-                features.append(t)
+                    d = 1 - (unit['damage'] / (unit["defense"] + 1))
+                if units is None:
+                    t = -1
+                else:
+                    t = units.get(idx, -1)
+                features.append([d, t]) #damage + target
         return tf.convert_to_tensor(features, dtype=tf.float32)
 
     def def_equivalent_units(self, action):

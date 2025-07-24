@@ -45,12 +45,13 @@ def visualize_mcts(root, nn=False):
     def add_edges(node, parent_id=None):
         node_id = id(node)
         if isinstance(node, mcts.DecisionNode) and node.player == 0:
-            node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
+            node_label = f"{node.visits}\n" \
+                    f"{round(node.value[0], 2)}, {round(node.value[1], 2)}" 
         elif isinstance(node, mcts.ChanceNode):
             node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
         else:
             node_label = f"{node.visits}\n{round(node.value[0], 2)}, {round(node.value[1], 2)}"
-        
+
         G.add_node(node_id, label=node_label, node_obj=node)  # Store node_obj for reference
 
         if node.game.is_terminal():
@@ -95,12 +96,12 @@ def visualize_mcts(root, nn=False):
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
+    #nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
     plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
     plt.show()
 
-    #plt.savefig(f"mcts_tree_{'NN' if nn else 'Normal'}.png", format="png", bbox_inches="tight")
+    plt.savefig(f"mcts_tree_test_case.png", format="png", bbox_inches="tight")
 
 def get_test_case():
     with open("units_total.json", "r") as file:
@@ -208,20 +209,20 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=100, nn=None):
+def mcts_round(game_state, max_reward, iterations=100000, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
     node = tree.search(root, iterations=iterations)
-    while not node.game.is_terminal():
+    """while not node.game.is_terminal():
         if isinstance(node, mcts.ChanceNode):
             print("actions", node.j_action, node.a_action)
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
                    else c.value[1])
         for c in node.children:
             if c.value == [0, 0]:
-                print(c.game.is_terminal(), c.game.check_if_terminal(), c.game)
+                print(c.game.is_terminal(), c.game.check_if_terminal(), c.game)"""
     return rewards, tree.root, actions, node
 
 def read_units(data):

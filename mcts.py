@@ -30,7 +30,8 @@ class ChanceNode: #node de chance
 
     def expand(self):
         '''Expands by adding a new child node.'''
-        game_copy, reward, rolls = self.game.get_next_state([self.j_action, self.a_action])
+        game_copy = copy.deepcopy(self.game)
+        game_copy, reward, rolls = game_copy.get_next_state([self.j_action, self.a_action])
         if game_copy is None:
             return None, [0, 0]
         child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)], rolls=rolls)

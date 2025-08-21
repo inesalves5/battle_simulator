@@ -1,0 +1,7 @@
+  ----------------------- japanese --------------------- allied----------------------val day-------------val night
+a. LBA vs BB
+                      "IJN_CV_Akagi"              "FNL_BB_Richelieu"                  25x0                 0x15
+b. LBA vs CV
+                      "IJN_CV_Akagi"                USN_CV_Bennington                25x15                0x5
+c. CV vs BB
+                      "IJN_CV_Unryu"              "FNL_BB_Richelieu"                 11x0                 4x15

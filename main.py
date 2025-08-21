@@ -10,6 +10,10 @@ import matplotlib.pyplot as plt
 import time
 import ds
 
+test_cases = [[ "IJN_CV_Akagi", "FNL_BB_Richelieu"],
+            [ "IJN_CV_Akagi", "USN_CV_Bennington"],
+            ["IJN_CV_Unryu", "FNL_BB_Richelieu"]]
+
 def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
     pos = _hierarchy_pos(G, root, width, vert_gap, xcenter)
@@ -103,8 +107,8 @@ def visualize_mcts(root, nn=False):
 
     plt.savefig(f"mcts_tree_test_case.png", format="png", bbox_inches="tight")
 
-def get_test_case():
-    with open("units_total.json", "r") as file:
+def get_encoded(case):
+    with open("units.json", "r") as file:
         units = json.load(file)
     units = units["units"]
     allied, japanese = [], []
@@ -122,7 +126,7 @@ def get_test_case():
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
 			"name":"USN_LBA_11thAF",
-            "damage": 0 if unit["name"] in ["IJN_LBA_21stFlottilla", "USN_LBA_10thAF", "USN_LBA_11thAF"] else float("inf"),
+            "damage": 0 if unit["name"] in case else float("inf"),
             "type": unit["type"] ,
             "attackValue":[attack["Air"], attack["Sea"]]
         }
@@ -130,19 +134,16 @@ def get_test_case():
             japanese.append(transformed_unit)
         else:
             allied.append(transformed_unit)
-    """
-    A = units["japanese"][0]
-    B = units["japanese"][2]
-    C = units["japanese"][4]
-    D = units["allied"][0]
-    E = units["allied"][3]
-    F = units["allied"][4]
-    """
-    game_state = game.Game(units=[japanese, allied], action="day", pv=[0, 0])
-    return game_state
+    return [japanese, allied]
+
+def replace_damage(game_state, idx):
+    for j in idx[0]:
+        game_state.units[0][j]["damage"] = 0
+    for a in idx[1]:
+        game_state.units[1][a]["damage"] = 0
 
 def choose_from_all(j, a):
-    with open("units_total.json", "r") as file:
+    with open("units.json", "r") as file:
         units = json.load(file)
     units = units["units"]
     allied, japanese = [], []
@@ -176,7 +177,6 @@ def choose_from_all(j, a):
 
     for unit in selected_allied:
         unit["damage"] = 0
-
     return japanese, allied
 
 def represent(game, action, player):
@@ -209,7 +209,7 @@ def choose_action(units, pv, nn=None):
         action = "day and night"
     return action
 
-def mcts_round(game_state, max_reward, iterations=100000, nn=None):
+def mcts_round(game_state, max_reward, iterations=100, nn=None):
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
@@ -325,7 +325,18 @@ def test_model_w_case():
     game_test = get_test_case()
     print("now lets predict")
     value = model.predict_value(game_test)
-    return value
+    return value   
+
+def set_test_cases():
+    with open("test_cases_encoded.json", "w") as file:
+        for case in test_cases:
+            units = get_encoded(case)
+            game_state_1 = game.Game(units=units, action="day", pv=[0, 0])
+            game_state_2 = game.Game(units=units, action="night", pv=[0, 0])
+            g1_encoded = game_state_1.encode().numpy().tolist()
+            g2_encoded = game_state_2.encode().numpy().tolist()
+            file.write(json.dumps(g1_encoded) + "\n")
+            file.write(json.dumps(g2_encoded) + "\n")
 
 if __name__ == "__main__":
     #start = time.time()
@@ -346,7 +357,7 @@ if __name__ == "__main__":
     with open("preds.txt", "a") as f:
         f.write(f"{v}\n")
     """
-    main()
+    set_test_cases()
     #game = get_test_case()
     #eq = game.generate_equivalent_games({54:102}, {102:55})
     #print(eq)

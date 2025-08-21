@@ -243,10 +243,10 @@ class Game:
     def __str__(self):
         return f"{[self.units[0][i]['damage'] for i in self.j_active], [self.units[1][i]['damage'] for i in self.a_active]}"
 
-    def encode(self, a0 = None, a1 = None):
+    def encode(self, units = None):
         features = []
-        for player, units in [(0, a0), (1, a1)]:
-            for idx, unit in enumerate(self.units[player]):
+        for player in range(2):
+            for unit in self.units[player]:
                 if unit['damage'] == float('inf'):
                     d = 0.0
                 elif unit["damage"] == 0:
@@ -255,12 +255,15 @@ class Game:
                     d = 1 - (unit['damage'] / unit["defense"])
                 else:
                     d = 1 - (unit['damage'] / (unit["defense"] + 1))
-                if units is None:
-                    t = -1
-                else:
-                    t = units.get(idx, -1)
-                features.append([d, t]) #damage + target
-        return tf.convert_to_tensor(features, dtype=tf.float32)
+                features.append(d)  # damage for player units
+        actions = [-1] * len(self.units[0])
+        if units is not None:
+            for attacker, target in units.items():
+                if target is not None:
+                    actions[attacker] = target
+        features += actions  # actions for player 0
+        features.append(0 if self.action == 'day' else 1)  # day or night
+        return tf.convert_to_tensor(features, dtype=tf.float16)
 
     def def_equivalent_units(self, action):
         with open(f'equivalent_units_{action}.json', 'w') as f:
@@ -289,7 +292,7 @@ class Game:
                         equivalent_games.append(Game(units=[new_units, self.units[1-player]], action=self.action, pv=self.pv))
         return equivalent_games
 
-    def generate_equivalent_games(self, a0, a1):
+    def generate_equivalent_games(self, a0):
         with open(f'equivalent_units_{self.action}.json', 'r') as f:
             data = json.load(f)
             equivalent_games = []
@@ -346,10 +349,6 @@ class Game:
                     new_a0 = None
                 else:
                     new_a0 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a0.items()}
-                if a1 is None:
-                    new_a1 = None   
-                else:
-                    new_a1 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a1.items()}
                 new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=sorted(j_active), a_active=sorted(a_active))
-                equivalent_games.append((new_a0, new_a1, new_game))
+                equivalent_games.append((new_a0, new_game))
         return equivalent_games

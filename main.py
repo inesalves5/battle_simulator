@@ -1,7 +1,6 @@
 import mcts
 import json
 import game
-import NN
 import random
 import copy
 import networkx as nx
@@ -328,7 +327,7 @@ def test_model_w_case():
     return value   
 
 def set_test_cases():
-    with open("test_cases_encoded.json", "w") as file:
+    with open("test_cases_encoded.json", "w", encoding="utf-8") as file:
         for case in test_cases:
             units = get_encoded(case)
             game_state_1 = game.Game(units=units, action="day", pv=[0, 0])

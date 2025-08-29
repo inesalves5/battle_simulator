@@ -266,7 +266,7 @@ class Game:
         return tf.convert_to_tensor(features, dtype=tf.float16)
 
     def def_equivalent_units(self, action):
-        with open(f'equivalent_units_{action}.json', 'w') as f:
+        with open(f'equivalent_units_{action}.json', 'w', encoding="utf-8") as f:
             data = defaultdict(list)
             for player in range(2):
                 for idx_unit, unit in enumerate(self.units[player]):

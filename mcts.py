@@ -20,7 +20,7 @@ class ChanceNode: #node de chance
     def is_fully_expanded(self):
         return False
     
-    def best_child(self, exploration_weight=1.4):
+    def best_child(self, exploration_weight=2.1):
         '''Selects the best child based on UCT value.'''
         return max(
             self.children,
@@ -86,7 +86,7 @@ class DecisionNode: #node para as acoes
     def is_fully_expanded(self):
         return not self.untried_actions
 
-    def best_child(self, exploration_weight=2):
+    def best_child(self, exploration_weight=2.1):
         '''Selects the best child based on UCT value.'''  
         return max(
             self.children,
@@ -139,11 +139,11 @@ class MCTS:
     def search(self, node, iterations):
         for _ in range(iterations):
             self.sample(node)
-        return node.best_child()
+        return node # .best_child() for cases where game is terminal from the root 
     
     def sample(self, node):
         rewards = node.reward
-        while not node.game.is_terminal():
+        while not (node.game.is_terminal() and isinstance(node, DecisionNode) and node.player==0):
             if isinstance(node, ChanceNode):
                 node, reward = node.expand()
                 rewards = [x+y for x, y in zip(reward, rewards)]
@@ -176,7 +176,7 @@ class MCTS:
         rewards = [0, 0]
         if node.player == 1:
             j_action = node.action
-            a_action = current_game.action_available(1)
+            a_action = current_game.action_available(1) 
             current_game, reward, _ = current_game.get_next_state([j_action, a_action])
             rewards = [x+y for x,y in zip(rewards, reward)]
             if current_game is None:

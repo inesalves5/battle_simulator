@@ -9,9 +9,19 @@ import matplotlib.pyplot as plt
 import time
 import ds
 
-test_cases = [[ "IJN_CV_Akagi", "FNL_BB_Richelieu"],
-            [ "IJN_CV_Akagi", "USN_CV_Bennington"],
-            ["IJN_CV_Unryu", "FNL_BB_Richelieu"]]
+test_cases = [
+  ["IJN_LBA_21stFlottilla", "FNL_BB_Richelieu"],   # a. LBA vs BB
+  ["IJN_LBA_21stFlottilla", "USN_CV_Bennington"],    # b. LBA vs CV
+  ["IJN_CV_Unryu", "FNL_BB_Richelieu"],              # c. CV vs BB
+  ["IJN_CV_Unryu", "USN_CV_Bennington", "FNL_BB_Richelieu"],  # d. CV vs CV+BB
+  ["IJN_CV_Unryu", "IJN_BB_Fuso", "USN_CV_Bennington", "FNL_BB_Richelieu"],  # e. CV+BB vs CV+BB
+  ["IJN_LBA_21stFlottilla", "RAN_LBA_RAAF", "FNL_BB_Richelieu"],       # f. LBA vs LBA+BB
+  ["IJN_LBA_21stFlottilla", "IJN_BB_Fuso", "RAN_LBA_RAAF", "FNL_BB_Richelieu"],  # g. LBA+BB vs LBA+BB
+  ["IJN_LBA_21stFlottilla", "IJN_CV_Unryu", "USN_CV_Bennington", "RAN_LBA_RAAF"],  # h. LBA+CV vs CV+LBA
+  ["IJN_LBA_21stFlottilla", "IJN_CV_Unryu", "USN_CV_Bennington"],  # i. LBA+CV vs CV
+  ["IJN_LBA_21stFlottilla", "IJN_CV_Unryu", "RAN_LBA_RAAF"],  # j. LBA+CV vs LBA
+  ["IJN_LBA_21stFlottilla", "IJN_CV_Unryu", "IJN_BB_Fuso", "USN_CV_Bennington", "RAN_LBA_RAAF", "FNL_BB_Richelieu"]  # k. LBA+CV+BB vs LBA+CV+BB
+]
 
 def hierarchy_pos(G, root=None, width=10, vert_gap=0.1, xcenter=0.5):
     """Compute the hierarchical layout positions for a directed tree graph."""
@@ -36,7 +46,7 @@ def _hierarchy_pos(G, node, width=1., vert_gap=0.2, xcenter=0.5, pos=None, paren
     
     return pos
 
-def visualize_mcts(root, nn=False):
+def visualize_mcts(root, nn=False, idx=None, action=None):
     """Generates a tree visualization using NetworkX and Matplotlib without Graphviz."""
     G = nx.DiGraph()
 
@@ -99,12 +109,14 @@ def visualize_mcts(root, nn=False):
     nx.draw_networkx_edges(G, pos, edge_color="gray", arrows=False)
     nx.draw_networkx_labels(G, pos, labels, font_size=13, verticalalignment="center")
 
-    #nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=10)
     plt.title(f"MCTS Tree Visualization for {root.game.action} action", fontsize=16)
     plt.axis("off")
-    plt.show()
-
-    plt.savefig(f"mcts_tree_test_case.png", format="png", bbox_inches="tight")
+    if idx is None:
+        plt.show()
+    else:
+        plt.savefig(f"mcts_trees/test_case_{idx}_during_{action}.png", format="png", bbox_inches="tight")
+    plt.close() 
 
 def get_encoded(case):
     with open("units.json", "r") as file:
@@ -112,19 +124,15 @@ def get_encoded(case):
     units = units["units"]
     allied, japanese = [], []
     for unit in units:
-        valid = True
         attack = {"Air": 0, "Sea": 0}
         is_elite = {"Air": None, "Sea": None}
         for area in unit["attackDomains"]:
             attack[area["domain"]] = area["attack"]
             is_elite[area["domain"]] = area["isElite"]
-        if unit["type"] not in ["LBA", "CV", "BB"]:
-            valid = False
         transformed_unit = {
             "attack": [attack["Air"], attack["Sea"]],
             "isElite": [is_elite["Air"], is_elite["Sea"]],
             "defense": unit["stepsMax"], 
-			"name":"USN_LBA_11thAF",
             "damage": 0 if unit["name"] in case else float("inf"),
             "type": unit["type"] ,
             "attackValue":[attack["Air"], attack["Sea"]]
@@ -209,19 +217,20 @@ def choose_action(units, pv, nn=None):
     return action
 
 def mcts_round(game_state, max_reward, iterations=100, nn=None):
+    print("mcts with ", iterations, "iterations")
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
     tree = mcts.MCTS(root)
-    node = tree.search(root, iterations=iterations)
-    """while not node.game.is_terminal():
+    node = tree.search(root, iterations=iterations) 
+    while node.children:
         if isinstance(node, mcts.ChanceNode):
-            print("actions", node.j_action, node.a_action)
+            actions.append([node.j_action, node.a_action])
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
                    else c.value[1])
-        for c in node.children:
-            if c.value == [0, 0]:
-                print(c.game.is_terminal(), c.game.check_if_terminal(), c.game)"""
+    if not node.game.is_terminal():
+        print("Game is not over after actions:", actions)
+        visualize_mcts(root)
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -313,6 +322,13 @@ def create_random_game(action="day", j=random.randint(1, 10), a=random.randint(1
         return create_random_game(action)
     return game_state
 
+def create_random_game_pair(j, a):
+    japanese, allied = choose_from_all(j, a)
+    pv = [0, 0]  # Placeholder for player values
+    game_state_day = game.Game(units=[japanese, allied], pv=pv, action="day")
+    game_state_night = game.Game(units=[japanese, allied], pv=pv, action="night")
+    return game_state_day, game_state_night
+
 def generate_eq_units():
     game_state = create_random_game()
     game_state.def_equivalent_units("day")
@@ -328,7 +344,8 @@ def test_model_w_case():
 
 def set_test_cases():
     with open("test_cases_encoded.json", "w", encoding="utf-8") as file:
-        for case in test_cases:
+        for idx, case in enumerate(test_cases):
+            print("Processing case:", idx)
             units = get_encoded(case)
             game_state_1 = game.Game(units=units, action="day", pv=[0, 0])
             game_state_2 = game.Game(units=units, action="night", pv=[0, 0])
@@ -337,26 +354,21 @@ def set_test_cases():
             file.write(json.dumps(g1_encoded) + "\n")
             file.write(json.dumps(g2_encoded) + "\n")
 
+def save_mcts_test_cases():
+    for idx, case in enumerate(test_cases):
+        if idx < 10:
+            iter = 500
+        else:
+            iter = 1000
+        print("Processing case:", idx)
+        units = get_encoded(case)
+        for action in ["day", "night"]:
+            print("Action:", action)
+            game_state = game.Game(units=copy.deepcopy(units), action=action, pv=[0, 0])
+            max_reward = game_state.max_reward(action)
+            result, root, actions, node = mcts_round(copy.deepcopy(game_state), max_reward, iterations=iter)
+            if root is not None:
+                visualize_mcts(root, idx=idx, action=action)
+
 if __name__ == "__main__":
-    #start = time.time()
-    #main()
-    #end = time.time()
-    #print("Execution time:", end - start, "seconds")
-    """
-    game_state = create_random_game()
-    print("Initial game state: j_active:", game_state.j_active, "a_active:", game_state.a_active)
-    equivalent_games = game_state.generate_equivalent_games()
-    print("equivalent games generated:")
-    for i in equivalent_games:
-        print(i.j_active, i.a_active)
-    """
-    """
-    v = test_model_w_case()
-    print(v)
-    with open("preds.txt", "a") as f:
-        f.write(f"{v}\n")
-    """
-    set_test_cases()
-    #game = get_test_case()
-    #eq = game.generate_equivalent_games({54:102}, {102:55})
-    #print(eq)
+    save_mcts_test_cases()

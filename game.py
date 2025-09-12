@@ -7,21 +7,27 @@ import tensorflow as tf
 import json
 
 class Game:
-    
-    def __init__(self, units, pv, action, j_active=None, a_active=None):
+
+    def __init__(self, units, pv, action, j_attackers=None, a_attackers=None, j_targets=None, a_targets=None):
         #eles usam (A)S-D-V - aereo, superficie, defesa, velocidade
         self.units = units
         self.action = action
         self.pv = pv
-        if j_active is not None and a_active is not None:
-            self.j_active = j_active
-            self.a_active = a_active 
+        if j_attackers is not None and a_attackers is not None and j_targets is not None and a_targets is not None:
+            self.j_attackers = j_attackers
+            self.a_attackers = a_attackers
+            self.j_targets = j_targets
+            self.a_targets = a_targets
         elif action == 'day':
-            self.j_active = [i for i, p in enumerate(self.units[0]) if p["type"] != 'BB' and p['damage'] != float('inf')]
-            self.a_active = [i for i, p in enumerate(self.units[1]) if p['damage'] != float('inf')]
+            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'BB' and p['damage'] != float('inf')]
+            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'BB' and p['damage'] != float('inf')]
+            self.j_targets = [i for i, p in enumerate(self.units[0]) if p['damage'] != float('inf')]
+            self.a_targets = [i for i, p in enumerate(self.units[1]) if p['damage'] != float('inf')]
         else:
-            self.j_active = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
-            self.a_active = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.j_targets = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.a_targets = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
         self.terminal = None
 
     def step(self, actions):
@@ -29,11 +35,14 @@ class Game:
         rewards = [0, 0]
         changes, removals = [], []
         change_gunnery, change_airstrike, change_isElite = [], [], []
-        j_active, a_active = self.j_active, self.a_active
+        j_attackers, a_attackers = self.j_attackers, self.a_attackers
+        j_targets, a_targets = self.j_targets, self.a_targets
         rolls = []
-        for player in range(2):
+        for player in range(2): 
             roll = []
             action = actions[player]
+            if action is None or len(action) == 0:
+                continue
             for attacker, t in action.items():
                 if t != None:
                     target =  self.units[1-player][t]
@@ -80,32 +89,23 @@ class Game:
                 unit['damage'] = float('inf')
             elif unit['damage'] > unit['defense']:
                 unit['damage'] = float('inf')
-            if idx in j_active and unit['damage'] == float('inf'):
-                j_active.remove(idx)
+            if idx in j_attackers and unit['damage'] == float('inf'):
+                j_attackers.remove(idx)
+            if idx in j_targets and unit['damage'] == float('inf'):
+                j_targets.remove(idx)
         for idx, unit in enumerate(self.units[1]):
             if unit['type'] == 'LBA' and unit['damage'] >= unit['defense']:
                 unit['damage'] = float('inf')
             elif unit['damage'] > unit['defense']:
                 unit['damage'] = float('inf')
-            if idx in a_active and unit['damage'] == float('inf'):
-                a_active.remove(idx)
-        return rewards, j_active, a_active, rolls
+            if idx in a_attackers and unit['damage'] == float('inf'):
+                a_attackers.remove(idx)
+            if idx in a_targets and unit['damage'] == float('inf'):
+                a_targets.remove(idx)
+        return rewards, j_attackers, a_attackers, j_targets, a_targets, rolls
 
     def check_if_terminal(self):
-        """aa0 = self.actions_available(0)
-        aa1 = self.actions_available(1)
-        return all([u['damage'] == float('inf') for u in self.units[0]]) or all([u['damage'] == float('inf') for u in self.units[1]]) or not aa0 or not aa1 or all([a is None for a in aa0]) or all([a is None for a in aa1])
-        if not self.j_active or not self.a_active:
-            return True
-        aa0 = self.actions_available(0)
-        aa1 = self.actions_available(1)
-        if aa0 == []:
-            return True
-        if aa1 == []:
-            return True
-        return False
-        """  
-        terminal = not self.actions_available(0) or not self.actions_available(1) 
+        terminal = (self.j_targets == [] or self.a_attackers == []) and (self.a_targets == [] or self.j_attackers == [])
         self.terminal = terminal
         return terminal
 
@@ -147,17 +147,19 @@ class Game:
             return [self.pv[0], -self.pv[0]]
         if not all([u['damage'] == float('inf') for u in self.units[1]]) and all([u['damage'] == float('inf') for u in self.units[0]]) :
             return [-self.pv[1], self.pv[1]]
-        if all([a is None for a in self.action_available(0)]) and not all([a is None for a in self.action_available(1)]):
+        if (self.action_available(0) is None or all([a is None for a in self.action_available(0)])) and not (self.action_available(1) is None or all([a is None for a in self.action_available(1)])):
             return [-self.pv[1], self.pv[1]]
-        if all([a is None for a in self.action_available(1)]) and not all([a is None for a in self.action_available(0)]):
+        if (self.action_available(1) is None or all([a is None for a in self.action_available(1)])) and not (self.action_available(0) is None or all([a is None for a in self.action_available(0)])):
             return [self.pv[0], -self.pv[0]]
         return [0, 0]
     
     def actions_available(self, player):
-        if not self.j_active or not self.a_active:
-            return []
-        units = self.j_active if player == 0 else self.a_active
-        targets = self.a_active if player == 0 else self.j_active
+        if player == 0 and not self.j_attackers:
+            return [None]
+        if player == 1 and not self.a_attackers:
+            return [None]
+        units = self.j_attackers if player == 0 else self.a_attackers
+        targets = self.a_targets if player == 0 else self.j_targets
         total_units = len(units)
         valid_actions = []
 
@@ -185,26 +187,24 @@ class Game:
         return self.terminal
 
     def get_next_state(self, actions):
-        new_game = Game(units=self.units.copy(), action=self.action, pv=self.pv, j_active=self.j_active.copy(), a_active=self.a_active.copy())
-        reward, j_active, a_active, rolls = new_game.step(actions)
+        new_game = Game(units=self.units.copy(), action=self.action, pv=self.pv, j_attackers=self.j_attackers.copy(), a_attackers=self.a_attackers.copy())
+        reward, j_attackers, a_attackers, j_targets, a_targets, rolls = new_game.step(actions)
         i = 3
         while new_game == self and i > 0:
             i -= 1
-            reward, j_active, a_active, rolls = new_game.step(actions)
+            reward, j_attackers, a_attackers, j_targets, a_targets, rolls = new_game.step(actions)
         if new_game == self:
             return None, [0, 0], None
         return new_game, reward, rolls
     
     def action_available(self, player):
         options = self.actions_available(player)
-        return random.choice(options) if options else []
+        return random.choice(options) if options else [None]
 
     def __eq__(self, other):
         if not isinstance(other, Game) or self.action != other.action or self.pv != other.pv:
             return False
         #return self._eq_unit_lists(self.units[0], other.units[0]) and self._eq_unit_lists(self.units[1], other.units[1])
-        jap_1, jap_2 = self.j_active, other.j_active
-        all_1, all_2 = self.a_active, other.a_active
         return self.eq_damages(other)
 
     def _eq_unit_lists(self, list1, list2):            
@@ -216,14 +216,16 @@ class Game:
         return True
     
     def eq_damages(self, other):
-        jap_1, jap_2 = self.j_active, other.j_active
-        all_1, all_2 = self.a_active, other.a_active
-        if jap_1 != jap_2 or all_1 != all_2:
+        jap_a_1, jap_a_2 = self.j_attackers, other.j_attackers
+        jap_t_1, jap_t_2 = self.j_targets, other.j_targets
+        all_a_1, all_a_2 = self.a_attackers, other.a_attackers
+        all_t_1, all_t_2 = self.a_targets, other.a_targets
+        if jap_a_1 != jap_a_2 or all_a_1 != all_a_2 or jap_t_1 != jap_t_2 or all_t_1 != all_t_2:
             return False
-        for i in jap_1:
+        for i in jap_a_1:
             if self.units[0][i]["damage"] != other.units[0][i]["damage"]:
                 return False
-        for j in all_1:
+        for j in all_a_1:
             if self.units[1][j]["damage"] != other.units[1][j]["damage"]:
                 return False
         return True
@@ -241,7 +243,8 @@ class Game:
                     all(u1["attackValue"][i] == u2["attackValue"][i] for i in range(len(u1["attackValue"])))
     
     def __str__(self):
-        return f"{[self.units[0][i]['damage'] for i in self.j_active], [self.units[1][i]['damage'] for i in self.a_active]}"
+        return f"{[self.units[0][i]['damage'] for i in self.j_attackers], [self.units[1][i]['damage'] for i in self.a_attackers], [self.units[0][i]['damage'] for i in self.j_targets], [self.units[1][i]['damage'] for i in self.a_targets]}"
+
 
     def encode(self, units = None):
         features = []
@@ -319,36 +322,42 @@ class Game:
             seen_keys.add(canonical_key)
             new_units_j = [unit.copy() for unit in self.units[0]]
             new_units_a = [unit.copy() for unit in self.units[1]]
-            j_active = self.j_active.copy()
-            a_active = self.a_active.copy()
+            j_attackers = self.j_attackers.copy()
+            a_attackers = self.a_attackers.copy()
+            j_targets = self.j_targets.copy()
+            a_targets = self.a_targets.copy()
             for orig_idx, repl_idx in zip(idx_map, replacement_indices):
                 if repl_idx != orig_idx:
-                    if repl_idx in j_active and orig_idx in j_active:
+                    if repl_idx in j_attackers and orig_idx in j_attackers:
                         new_units_j[repl_idx] = self.units[0][orig_idx].copy()
                         new_units_j[orig_idx] = self.units[0][repl_idx].copy()
-                    elif repl_idx in j_active and orig_idx in a_active:
+                    elif repl_idx in j_attackers and orig_idx in a_attackers:
                         new_units_j[repl_idx] = self.units[0][orig_idx].copy()
                         new_units_a[orig_idx-len(self.units[0])] = self.units[1][repl_idx].copy()
-                    elif repl_idx in a_active and orig_idx in a_active:
+                    elif repl_idx in a_attackers and orig_idx in a_attackers:
                         new_units_a[repl_idx] = self.units[1][orig_idx-len(self.units[0])].copy()
                         new_units_a[orig_idx] = self.units[1][repl_idx-len(self.units[0])].copy()
-                    elif repl_idx in a_active and orig_idx in j_active:
+                    elif repl_idx in a_attackers and orig_idx in j_attackers:
                         new_units_a[repl_idx] = self.units[1][orig_idx].copy()
                         new_units_j[orig_idx-len(self.units[0])] = self.units[0][repl_idx].copy()
-                    elif repl_idx < len(self.units[0]) and repl_idx not in j_active and orig_idx in j_active:  #casos de replicas inativas
+                    elif repl_idx < len(self.units[0]) and repl_idx not in j_attackers and orig_idx in j_attackers:  #casos de replicas inativas
                         new_units_j[repl_idx] = self.units[0][orig_idx].copy()
                         new_units_j[orig_idx]['damage'] = float('inf')
-                        j_active.remove(orig_idx)
-                        j_active.append(repl_idx)
-                    elif repl_idx >= len(self.units[0]) and repl_idx not in a_active and orig_idx in a_active:
+                        j_attackers.remove(orig_idx)
+                        j_targets.remove(orig_idx)
+                        j_attackers.append(repl_idx)
+                        j_targets.append(repl_idx)
+                    elif repl_idx >= len(self.units[0]) and repl_idx not in a_attackers and orig_idx in a_attackers:
                         new_units_a[repl_idx-len(self.units[0])] = self.units[1][orig_idx-len(self.units[0])].copy()
-                        a_active.remove(orig_idx)
-                        a_active.append(repl_idx-len(self.units[0]))
+                        a_attackers.remove(orig_idx)
+                        a_targets.remove(orig_idx)
+                        a_attackers.append(repl_idx-len(self.units[0]))
+                        a_targets.append(repl_idx-len(self.units[0]))
                         new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
                 if a0 is None:
                     new_a0 = None
                 else:
                     new_a0 = {(repl_idx if k == orig_idx else k): (repl_idx if v == orig_idx else v) for k, v in a0.items()}
-                new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_active=sorted(j_active), a_active=sorted(a_active))
+                new_game = Game(units=[new_units_j, new_units_a], action=self.action, pv=self.pv, j_attackers=sorted(j_attackers), a_attackers=sorted(a_attackers), j_targets=sorted(j_targets), a_targets=sorted(a_targets))
                 equivalent_games.append((new_a0, new_game))
         return equivalent_games

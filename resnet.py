@@ -20,21 +20,59 @@ class ResidualNetwork(tf.keras.Model):
     def __init__(self, input_dim=INPUT_DIM):
         super(ResidualNetwork, self).__init__()
         self.fc_input = layers.Dense(256, activation='relu')
-        
-        #blocos residuais
         self.residual_block1 = ResidualBlock(256)
         self.residual_block2 = ResidualBlock(256)
-        
         self.fc_middle = layers.Dense(128, activation='relu')
         self.output_layer = layers.Dense(1, activation='linear')
 
     def call(self, inputs):
         x = self.fc_input(inputs)
-
-        #blocos residuais
         x = self.residual_block1(x)
         x = self.residual_block2(x)
+        x = self.fc_middle(x)
+        return self.output_layer(x)
 
+    def predict_rewards(self, game_state, action):
+        encoded = tf.expand_dims(game_state.encode(action), axis=0)
+        reward = self(encoded, training=False) 
+        return float(reward.numpy()[0][0])
+
+class ResidualNetwork_Deeper(tf.keras.Model):
+    def __init__(self, input_dim=INPUT_DIM):
+        super(ResidualNetwork_Deeper, self).__init__()
+        self.fc_input = layers.Dense(256, activation='relu')
+        self.residual_block1 = ResidualBlock(256)
+        self.residual_block2 = ResidualBlock(256)
+        self.residual_block3 = ResidualBlock(256)
+        self.residual_block4 = ResidualBlock(256)  
+        self.fc_middle = layers.Dense(128, activation='relu')
+        self.output_layer = layers.Dense(1, activation='linear')
+
+    def call(self, inputs):
+        x = self.fc_input(inputs)
+        x = self.residual_block1(x)
+        x = self.residual_block2(x)
+        x = self.fc_middle(x)
+        return self.output_layer(x)
+
+    def predict_rewards(self, game_state, action):
+        encoded = tf.expand_dims(game_state.encode(action), axis=0)
+        reward = self(encoded, training=False) 
+        return float(reward.numpy()[0][0])
+
+class ResidualNetwork_Larger(tf.keras.Model):
+    def __init__(self, input_dim=INPUT_DIM):
+        super(ResidualNetwork_Larger, self).__init__()
+        self.fc_input = layers.Dense(256, activation='relu')
+        self.residual_block1 = ResidualBlock(512)
+        self.residual_block2 = ResidualBlock(512)
+        self.fc_middle = layers.Dense(128, activation='relu')
+        self.output_layer = layers.Dense(1, activation='linear')
+
+    def call(self, inputs):
+        x = self.fc_input(inputs)
+        x = self.residual_block1(x)
+        x = self.residual_block2(x)
         x = self.fc_middle(x)
         return self.output_layer(x)
 

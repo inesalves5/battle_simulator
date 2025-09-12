@@ -1,7 +1,33 @@
-  ----------------------- japanese --------------------- allied----------------------val day-------------val night
-a. LBA vs BB
-                      "IJN_CV_Akagi"              "FNL_BB_Richelieu"                  25x0                 0x15
-b. LBA vs CV
-                      "IJN_CV_Akagi"                USN_CV_Bennington                25x15                0x5
-c. CV vs BB
-                      "IJN_CV_Unryu"              "FNL_BB_Richelieu"                 11x0                 4x15
+  ------------------------val day-------------val night
+0. LBA vs BB
+                                     
+1. LBA vs CV
+                     
+2. CV vs BB
+                     
+3. CV vs CV+BB
+
+4. CV+BB vs CV+BB
+
+5. LBA vs LBA+BB
+
+6. LBA+BB vs LBA+BB
+
+7. LBA+CV vs CV+LBA
+
+8. LBA+CV vs CV
+
+9. LBA+CV vs LBA
+
+10. LBA+CV+BB vs LBA+CV+BB
+
+
+japanese:
+  LBA: IJN_LBA_21stFlottilla
+  BB: IJN_BB_Fuso
+  CV: IJN_CV_Unryu
+
+allied:
+  LBA: RAN_LBA_RAAF
+  BB: "FNL_BB_Richelieu"
+  CV: USN_CV_Bennington

@@ -8,10 +8,10 @@ from itertools import product
 import json
 import fully_connected
 import resnet
-import transformer
-import transformer_encoder
 
 options = list(product(range(1, 11), repeat=2))
+INPUT_DIM = 190+64+1 # 190 for state, 64 for action, 1 for action type
+nn_type = "resnet"  # or "fully_connected"
 
 def serialize_example(feature, target):
     # Ensure feature is numpy
@@ -63,7 +63,7 @@ class GameValueDataset(tf.data.Dataset):
         return load_dataset()
 
 class PredictAfterEpoch(tf.keras.callbacks.Callback):
-    def __init__(self, test_inputs="test_cases_encoded.json", log_path="transformer_encoder/test_cases.json"): #logpath depends on nn type
+    def __init__(self, test_inputs="test_cases_encoded.json", log_path=f"{nn_type}/test_cases.json"): #logpath depends on nn type
         super().__init__()
         self.test_inputs = [l.strip() for l in open(test_inputs)]  # shape: (n_samples, n_features)
         self.log_path = log_path
@@ -81,69 +81,79 @@ class PredictAfterEpoch(tf.keras.callbacks.Callback):
                 json.dump({"epoch": epoch + 1, "sample": i, "prediction": float(prediction)}, f)
                 f.write("\n")
 
-def train_value_net(epochs=100, batch_size=64, lr=1e-4):
-    """raw_data = []
-    with open("replay_buffer.json", "r") as f:
-        for line in f:
-            try:
-                raw_data.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    print("data read")
-    data = [(item["game"], item["result"]) for item in raw_data]"""
+def train_value_net(epochs=40, batch_size=64, lr=1e-4):
     data = [] #para quando nao esta a ser escrito
     dataset = GameValueDataset(data)
     dataset = dataset.map(lambda x, y: (tf.reshape(x, [tf.shape(x)[0], 255]), y))
     dataset = dataset.map(lambda x, y: (tf.cast(x, tf.float32), tf.cast(y, tf.float32)))
-    model = transformer_encoder.GameTransformer() # depends on nn type
+    model = resnet.ResidualNetwork(INPUT_DIM) # depends on nn type
+    dummy_input = tf.zeros((1, INPUT_DIM))
+    _ = model(dummy_input)  # constrói o modelo    
     try:
-        model.load_weights('transformer_encoder.weights.h5') # depends on nn type
+        model.load_weights(f"{nn_type}.weights.h5") # depends on nn type
     except Exception as e:
-        print("erro ao carregar pesos")
+        print("erro:", e)
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=lr),
                   loss='mse')
     print("compiled")
     callbacks = [PredictAfterEpoch()]
     history = model.fit(dataset, epochs=epochs, callbacks=callbacks)
     print("correu")
-    with open("transformer_encoder/training.json", "a", encoding="utf-8") as file:  # depends on nn type
+    with open(f"{nn_type}/training.json", "a", encoding="utf-8") as file:  # depends on nn type
         json.dump(history.history, file)
-    model.save_weights('transformer_encoder.weights.h5') #depends on nn type
+    model.save_weights(f'{nn_type}.weights.h5') #depends on nn type
     return model
 
-def simulate(game_state):
+def simulate(game_state, iterations, action):
     r = 0
     buffer = []
     g = copy.deepcopy(game_state)
-    while not g.is_terminal():
-        a0 = g.action_available(0)
-        a1 = g.action_available(1)
-        buffer.append((a0, g))
-        g, reward, _ = g.get_next_state([a0, a1])
+    max_reward = g.max_reward(action)
+    _, _, actions, _ = main.mcts_round(g, max_reward=max_reward,iterations=iterations*100)
+    for action in actions:
+        g, reward, _ = g.get_next_state(action)
         if g is None:
             return None, None
         r += reward[0]
     buffer.append((None, g))
     r += g.reward_zone()[0]
     return r, buffer
-    
 
 def self_play_and_generate_training_data():
     with open("replay_buffer.json", "a", encoding="utf-8") as f:
         for n in options:
             a, j = n
             print("-----------------------case", n)
-            game_state = main.create_random_game("day", a, j)
-            r, buffer = simulate(game_state)
-            if r is None:
+            game_state_day, game_state_night = main.create_random_game_pair(a, j)
+            r_day, buffer_day = simulate(game_state_day, iterations=a+j, action="day")
+            r_night, buffer_night = simulate(game_state_night, iterations=a+j, action="night")
+            if r_day is None or r_night is None:
                 continue
-            print("result is:", r)
-            all_games = []
-            for (a0, game_part) in buffer:
-                all_games += game_part.generate_equivalent_games(a0)
-            for (a0, g) in all_games:
+            all_games_day, all_games_night = [], []
+            for (a0, game_part) in buffer_day:
+                all_games_day += game_part.generate_equivalent_games(a0)
+            for (a0, g) in all_games_day:
                 features = g.encode(a0).numpy().tolist()
-                f.write(json.dumps({"game": features, "result": r}) + "\n")
+                f.write(json.dumps({"game": features, "result": r_day}) + "\n")
+            for (a0, game_part) in buffer_night:
+                all_games_night += game_part.generate_equivalent_games(a0)
+            for (a0, g) in all_games_night:
+                features = g.encode(a0).numpy().tolist()
+                f.write(json.dumps({"game": features, "result": r_night}) + "\n")
 
-if __name__ == "__main__":        
-    train_value_net()
+def write_data():
+    raw_data = []
+    i = 0
+    with open("replay_buffer.json", "r") as f:
+        for idx, line in enumerate(f):
+            try:
+                raw_data.append(json.loads(line))
+            except json.JSONDecodeError:
+                i+=1
+                continue
+    print("data read with", i, "errors after", idx, "lines")
+    data = [(item["game"], item["result"]) for item in raw_data]
+    dataset = GameValueDataset(data)
+    
+if __name__ == "__main__":
+    self_play_and_generate_training_data()

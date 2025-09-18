@@ -23,7 +23,7 @@
 
 
 japanese:
-  LBA: IJN_LBA_21stFlottilla
+  LBA: IJN_LBA_21stFlottilla 
   BB: IJN_BB_Fuso
   CV: IJN_CV_Unryu
 

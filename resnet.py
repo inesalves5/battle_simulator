@@ -9,8 +9,8 @@ class ResidualBlock(layers.Layer):
         super(ResidualBlock, self).__init__()
         self.dense1 = layers.Dense(units, activation='relu')
         self.dense2 = layers.Dense(units)
-        self.activation = layers.Activation('relu')
-
+        self.activation = layers.ReLU(name=f"{self.name}_relu")
+        
     def call(self, inputs):
         x = self.dense1(inputs)
         x = self.dense2(x)
@@ -63,7 +63,7 @@ class ResidualNetwork_Deeper(tf.keras.Model):
 class ResidualNetwork_Larger(tf.keras.Model):
     def __init__(self, input_dim=INPUT_DIM):
         super(ResidualNetwork_Larger, self).__init__()
-        self.fc_input = layers.Dense(256, activation='relu')
+        self.fc_input = layers.Dense(512, activation='relu')
         self.residual_block1 = ResidualBlock(512)
         self.residual_block2 = ResidualBlock(512)
         self.fc_middle = layers.Dense(128, activation='relu')

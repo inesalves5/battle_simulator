@@ -81,9 +81,9 @@ def visualize_mcts(root, nn=False, idx=None, action=None):
             child_node = node  # since `node_id` corresponds to the current (child) node
             if isinstance(child_node, mcts.DecisionNode) and child_node.player == 1:
                 edge_labels[(parent_id, node_id)] = child_node.action
-            elif isinstance(child_node, mcts.DecisionNode):
-                edge_labels[(parent_id, node_id)] = child_node.rolls
-            else:
+            #elif isinstance(child_node, mcts.DecisionNode):
+            #    edge_labels[(parent_id, node_id)] = child_node.rolls
+            elif isinstance(child_node, mcts.ChanceNode):
                 edge_labels[(parent_id, node_id)] = child_node.a_action
 
         for child in node.children:
@@ -217,13 +217,13 @@ def choose_action(units, pv, nn=None):
     return action
 
 def mcts_round(game_state, max_reward, iterations=100, nn=None):
-    print("mcts with ", iterations, "iterations")
     rewards = [0, 0]
     actions = []
     root = mcts.DecisionNode(game_state, max_reward=max_reward, player=0, root=True)
-    tree = mcts.MCTS(root)
+    tree = mcts.MCTS(root, nn=nn)
     node = tree.search(root, iterations=iterations) 
-    while node.children:
+
+    """while node.children:
         if isinstance(node, mcts.ChanceNode):
             actions.append([node.j_action, node.a_action])
         node = max(node.children, key=lambda c: c.value[0] if (isinstance(c, mcts.DecisionNode) and c.player == 1)
@@ -231,6 +231,7 @@ def mcts_round(game_state, max_reward, iterations=100, nn=None):
     if not node.game.is_terminal():
         print("Game is not over after actions:", actions)
         visualize_mcts(root)
+     """   
     return rewards, tree.root, actions, node
 
 def read_units(data):
@@ -357,9 +358,9 @@ def set_test_cases():
 def save_mcts_test_cases():
     for idx, case in enumerate(test_cases):
         if idx < 10:
-            iter = 500
+            iter = 200
         else:
-            iter = 1000
+            iter = 300
         print("Processing case:", idx)
         units = get_encoded(case)
         for action in ["day", "night"]:

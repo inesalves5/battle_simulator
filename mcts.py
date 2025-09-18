@@ -20,7 +20,7 @@ class ChanceNode: #node de chance
     def is_fully_expanded(self):
         return False
     
-    def best_child(self, exploration_weight=2.1):
+    def best_child(self, exploration_weight=1.4):
         '''Selects the best child based on UCT value.'''
         return max(
             self.children,
@@ -34,8 +34,7 @@ class ChanceNode: #node de chance
         game_copy, reward, rolls = game_copy.get_next_state([self.j_action, self.a_action])
         if game_copy is None:
             return None, [0, 0]
-        child_node = DecisionNode(game_copy, self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)], rolls=rolls)
-        self.rolls = rolls
+        child_node = DecisionNode(copy.deepcopy(game_copy), self.max_reward, parent=self, action=self.a_action, reward=[x+y for x, y in zip(reward, self.reward)], rolls=rolls)
         for existing_child in self.children:
             if existing_child == child_node:
                 return existing_child, reward
@@ -58,9 +57,8 @@ class ChanceNode: #node de chance
         self.children.append(child)
     
     def __eq__(self, other):
-        return isinstance(other, ChanceNode) and self.game == other.game and self.a_action == other.a_action and\
-                self.j_action == other.j_action and self.parent == other.parent 
-                
+        return isinstance(other, ChanceNode) and self.game == other.game and self.parent == other.parent
+
     def __str__(self):
         final = ''
         for player in range(2):
@@ -84,9 +82,11 @@ class DecisionNode: #node para as acoes
         self.rolls = rolls
 
     def is_fully_expanded(self):
-        return not self.untried_actions
+        if self.untried_actions == [] and self.children == []:
+            print(self.game)
+        return self.untried_actions == [] or (self.untried_actions is None and self.children != [])
 
-    def best_child(self, exploration_weight=2.1):
+    def best_child(self, exploration_weight=1.4):
         '''Selects the best child based on UCT value.'''  
         return max(
             self.children,
@@ -121,7 +121,7 @@ class DecisionNode: #node para as acoes
               
     def __eq__(self, other):
         return isinstance(other, DecisionNode) and self.game == other.game and self.action == other.action and \
-                self.parent == other.parent and self.player == other.player and self.reward == other.reward
+                self.parent == other.parent and self.player == other.player and self.reward == other.reward 
 
     def __str__(self):
         final = ''
@@ -139,7 +139,7 @@ class MCTS:
     def search(self, node, iterations):
         for _ in range(iterations):
             self.sample(node)
-        return node # .best_child() for cases where game is terminal from the root 
+        return node.best_child() # for cases where game is terminal from the root
     
     def sample(self, node):
         rewards = node.reward
@@ -172,7 +172,10 @@ class MCTS:
         game = node.game
         current_game = copy.deepcopy(game)
         if self.nn is not None:
-            return self.nn.predict(current_game.encode())
+            if node.player == 0:
+                return self.nn.predict_rewards(current_game.encode())
+            else:
+                return self.nn.predict_rewards(current_game.encode(), node.action)
         rewards = [0, 0]
         if node.player == 1:
             j_action = node.action

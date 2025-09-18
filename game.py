@@ -19,13 +19,13 @@ class Game:
             self.j_targets = j_targets
             self.a_targets = a_targets
         elif action == 'day':
-            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'BB' and p['damage'] != float('inf')]
-            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'BB' and p['damage'] != float('inf')]
+            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'BB' and p['damage'] != float('inf') and p['attack'][0] != 0]
+            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'BB' and p['damage'] != float('inf') and p['attack'][0] != 0]
             self.j_targets = [i for i, p in enumerate(self.units[0]) if p['damage'] != float('inf')]
             self.a_targets = [i for i, p in enumerate(self.units[1]) if p['damage'] != float('inf')]
         else:
-            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
-            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
+            self.j_attackers = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf') and p['attack'][1] != 0]
+            self.a_attackers = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf') and p['attack'][1] != 0]
             self.j_targets = [i for i, p in enumerate(self.units[0]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
             self.a_targets = [i for i, p in enumerate(self.units[1]) if p["type"] != 'LBA' and p['damage'] != float('inf')]
         self.terminal = None
@@ -41,7 +41,8 @@ class Game:
         for player in range(2): 
             roll = []
             action = actions[player]
-            if action is None or len(action) == 0:
+            if action is None or action == []:
+                rolls.append(roll)
                 continue
             for attacker, t in action.items():
                 if t != None:
@@ -154,9 +155,9 @@ class Game:
         return [0, 0]
     
     def actions_available(self, player):
-        if player == 0 and not self.j_attackers:
+        if player == 0 and (self.j_attackers == [] or self.a_targets == []):
             return [None]
-        if player == 1 and not self.a_attackers:
+        if player == 1 and (self.a_attackers == [] or self.j_targets == []):
             return [None]
         units = self.j_attackers if player == 0 else self.a_attackers
         targets = self.a_targets if player == 0 else self.j_targets
@@ -187,9 +188,9 @@ class Game:
         return self.terminal
 
     def get_next_state(self, actions):
-        new_game = Game(units=self.units.copy(), action=self.action, pv=self.pv, j_attackers=self.j_attackers.copy(), a_attackers=self.a_attackers.copy())
+        new_game = Game(units=copy.deepcopy(self.units), action=self.action, pv=self.pv, j_attackers=copy.deepcopy(self.j_attackers), a_attackers=copy.deepcopy(self.a_attackers))
         reward, j_attackers, a_attackers, j_targets, a_targets, rolls = new_game.step(actions)
-        i = 3
+        i = 4
         while new_game == self and i > 0:
             i -= 1
             reward, j_attackers, a_attackers, j_targets, a_targets, rolls = new_game.step(actions)
@@ -199,7 +200,7 @@ class Game:
     
     def action_available(self, player):
         options = self.actions_available(player)
-        return random.choice(options) if options else [None]
+        return random.choice(options) if options else None
 
     def __eq__(self, other):
         if not isinstance(other, Game) or self.action != other.action or self.pv != other.pv:
@@ -227,6 +228,12 @@ class Game:
                 return False
         for j in all_a_1:
             if self.units[1][j]["damage"] != other.units[1][j]["damage"]:
+                return False
+        for k in jap_t_1:
+            if self.units[0][k]["damage"] != other.units[0][k]["damage"]:
+                return False
+        for l in all_t_1:
+            if self.units[1][l]["damage"] != other.units[1][l]["damage"]:
                 return False
         return True
 
@@ -263,7 +270,7 @@ class Game:
         if units is not None:
             for attacker, target in units.items():
                 if target is not None:
-                    actions[attacker] = target
+                    actions[attacker] = target/(len(self.units[1]) - 1)
         features += actions  # actions for player 0
         features.append(0 if self.action == 'day' else 1)  # day or night
         return tf.convert_to_tensor(features, dtype=tf.float16)
@@ -289,8 +296,8 @@ class Game:
                 if unit['damage'] != float('inf'):
                     options = data.get(str(idx_unit if player == 0 else idx_unit + len(self.units[0])), [])
                     for option in options:
-                        new_units = [u.copy() for u in self.units[player]]
-                        new_units[option] = self.units[player][idx_unit].copy()
+                        new_units = [copy.deepcopy(u) for u in self.units[player]]
+                        new_units[option] = copy.deepcopy(self.units[player][idx_unit])
                         new_units[idx_unit]["damage"] = float("inf")
                         equivalent_games.append(Game(units=[new_units, self.units[1-player]], action=self.action, pv=self.pv))
         return equivalent_games
@@ -320,39 +327,47 @@ class Game:
             if canonical_key in seen_keys:
                 continue
             seen_keys.add(canonical_key)
-            new_units_j = [unit.copy() for unit in self.units[0]]
-            new_units_a = [unit.copy() for unit in self.units[1]]
-            j_attackers = self.j_attackers.copy()
-            a_attackers = self.a_attackers.copy()
-            j_targets = self.j_targets.copy()
-            a_targets = self.a_targets.copy()
+            new_units_j = [copy.deepcopy(unit) for unit in self.units[0]]
+            new_units_a = [copy.deepcopy(unit) for unit in self.units[1]]
+            j_attackers = copy.deepcopy(self.j_attackers)
+            a_attackers = copy.deepcopy(self.a_attackers)
+            j_targets = copy.deepcopy(self.j_targets)
+            a_targets = copy.deepcopy(self.a_targets)
             for orig_idx, repl_idx in zip(idx_map, replacement_indices):
                 if repl_idx != orig_idx:
                     if repl_idx in j_attackers and orig_idx in j_attackers:
-                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
-                        new_units_j[orig_idx] = self.units[0][repl_idx].copy()
+                        new_units_j[repl_idx] = copy.deepcopy(self.units[0][orig_idx])
+                        new_units_j[orig_idx] = copy.deepcopy(self.units[0][repl_idx])
                     elif repl_idx in j_attackers and orig_idx in a_attackers:
-                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
-                        new_units_a[orig_idx-len(self.units[0])] = self.units[1][repl_idx].copy()
+                        new_units_j[repl_idx] = copy.deepcopy(self.units[0][orig_idx])
+                        new_units_a[orig_idx-len(self.units[0])] = copy.deepcopy(self.units[1][repl_idx])
                     elif repl_idx in a_attackers and orig_idx in a_attackers:
-                        new_units_a[repl_idx] = self.units[1][orig_idx-len(self.units[0])].copy()
-                        new_units_a[orig_idx] = self.units[1][repl_idx-len(self.units[0])].copy()
+                        new_units_a[repl_idx] = copy.deepcopy(self.units[1][orig_idx-len(self.units[0])])
+                        new_units_a[orig_idx] = copy.deepcopy(self.units[1][repl_idx-len(self.units[0])])
                     elif repl_idx in a_attackers and orig_idx in j_attackers:
-                        new_units_a[repl_idx] = self.units[1][orig_idx].copy()
-                        new_units_j[orig_idx-len(self.units[0])] = self.units[0][repl_idx].copy()
-                    elif repl_idx < len(self.units[0]) and repl_idx not in j_attackers and orig_idx in j_attackers:  #casos de replicas inativas
-                        new_units_j[repl_idx] = self.units[0][orig_idx].copy()
+                        new_units_a[repl_idx] = copy.deepcopy(self.units[1][orig_idx])
+                        new_units_j[orig_idx-len(self.units[0])] = copy.deepcopy(self.units[0][repl_idx])
+                    elif repl_idx < len(self.units[0]):  #casos de replicas inativas
+                        new_units_j[repl_idx] = copy.deepcopy(self.units[0][orig_idx])
                         new_units_j[orig_idx]['damage'] = float('inf')
-                        j_attackers.remove(orig_idx)
-                        j_targets.remove(orig_idx)
-                        j_attackers.append(repl_idx)
-                        j_targets.append(repl_idx)
-                    elif repl_idx >= len(self.units[0]) and repl_idx not in a_attackers and orig_idx in a_attackers:
-                        new_units_a[repl_idx-len(self.units[0])] = self.units[1][orig_idx-len(self.units[0])].copy()
-                        a_attackers.remove(orig_idx)
-                        a_targets.remove(orig_idx)
-                        a_attackers.append(repl_idx-len(self.units[0]))
-                        a_targets.append(repl_idx-len(self.units[0]))
+                        if orig_idx in j_attackers:
+                            j_attackers.remove(orig_idx)
+                        if orig_idx in j_targets:
+                            j_targets.remove(orig_idx)
+                        if repl_idx not in j_attackers:
+                            j_attackers.append(repl_idx)
+                        if repl_idx not in j_targets:
+                            j_targets.append(repl_idx)
+                    elif repl_idx >= len(self.units[0]):
+                        new_units_a[repl_idx-len(self.units[0])] = copy.deepcopy(self.units[1][orig_idx-len(self.units[0])])
+                        if orig_idx in a_attackers:
+                            a_attackers.remove(orig_idx)
+                        if orig_idx in a_targets:
+                            a_targets.remove(orig_idx)
+                        if repl_idx-len(self.units[0]) not in a_attackers:
+                            a_attackers.append(repl_idx-len(self.units[0]))
+                        if repl_idx-len(self.units[0]) not in a_targets:
+                            a_targets.append(repl_idx-len(self.units[0]))
                         new_units_a[orig_idx-len(self.units[0])]['damage'] = float('inf')
                 if a0 is None:
                     new_a0 = None
